@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0a0e13">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>טלפרומפטר קולי</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Layout: a setup sheet (script + settings) that opens into a full-screen reading stage.
+   The active line is pinned to a fixed eye-line near the front camera; the script moves under it. */
+:root{
+  --bg:#0a0e13;
+  --surface:#121820;
+  --line:#242d38;
+  --fg:#eef2f6;
+  --muted:#8a97a6;
+  --dim:#4b5766;
+  --accent:#ffd166;
+  --on-accent:#14110a;
+  --warn:#ff9b8a;
+  --font-ui:"Heebo",system-ui,-apple-system,"Segoe UI","Noto Sans Hebrew",Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+html.lock,body.lock{overflow:hidden;overscroll-behavior:none}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 var(--font-ui);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+
+/* ---------- setup ---------- */
+.setup{min-height:100vh;min-height:100dvh;max-width:640px;margin:0 auto;padding-inline:16px;padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.panel{display:flex;flex-direction:column;gap:10px;flex:none}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.ctl{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ctl .row label{font-size:.85rem;color:var(--muted);font-weight:500}
+.ctl input[type=range]{height:26px}
+.ctl select{width:100%}
+.checks{display:flex;flex-wrap:wrap;gap:8px 22px}
+h1{font-size:1.5rem;font-weight:800;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lead{color:var(--muted);margin:0 0 22px;max-width:46ch}
+.field{display:flex;flex-direction:column;gap:10px;padding-block:18px;border-top:1px solid var(--line)}
+.row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0}
+label,.lbl{font-weight:600;font-size:.95rem}
+.muted,.hint,.note{color:var(--muted);font-size:.875rem;margin:0}
+.note{color:var(--warn)}
+output{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.9rem}
+textarea{flex:1 1 auto;width:100%;min-height:96px;resize:none;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:1.1rem;line-height:1.6}
+textarea::placeholder{color:var(--dim)}
+select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+input[type=range]{width:100%;height:32px;accent-color:var(--accent)}
+.check{display:flex;gap:10px;align-items:center;font-weight:400}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
+.seg label{position:relative;display:block;font-weight:600}
+.seg input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.seg span{display:block;text-align:center;padding:10px 8px;border-radius:9px;color:var(--muted)}
+.seg input:checked + span{background:var(--accent);color:var(--on-accent)}
+.seg input:focus-visible + span{outline:2px solid var(--fg);outline-offset:2px}
+.seg input:disabled + span{opacity:.4}
+.go{width:100%;min-height:54px;border:0;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:800;font-size:1.2rem;cursor:pointer;flex:none}
+.go:active{transform:translateY(1px)}
+.err{color:var(--warn);margin:12px 0 0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- prompter ---------- */
+#prompter{position:fixed;top:0;right:0;bottom:0;left:0;background:var(--bg);z-index:10;--fs:56px;--anchor:80px;--tick:120px;--colwid:60vw}
+#stage{position:absolute;top:0;right:0;bottom:0;left:0;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-mask-image:var(--mask,none);mask-image:var(--mask,none)}
+body.mirror #stage{transform:scaleX(-1)}
+#script{position:relative;width:var(--colwid);margin:0 auto;padding:var(--anchor) 0 75vh;text-align:center;font-size:var(--fs);line-height:1.55;font-weight:700;letter-spacing:0}
+#script p{margin:0 0 .7em}
+.w{padding:.02em .1em;margin-inline:-.1em;border-radius:.2em;transition:color .08s,background-color .08s}
+.w.done{color:var(--dim)}
+.w.cur{background:var(--accent);color:var(--on-accent)}
+.tick{position:fixed;top:var(--tick);width:0;height:0;border-style:solid;transform:translateY(-50%);pointer-events:none}
+.tick.r{right:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 13px 9px 0;border-color:transparent var(--accent) transparent transparent}
+.tick.l{left:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 0 9px 13px;border-color:transparent transparent transparent var(--accent)}
+
+#bar{position:fixed;right:0;left:0;bottom:0;padding:26px 12px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,rgba(10,14,19,.98) 68%,rgba(10,14,19,0))}
+.meter{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:10px}
+#progress{display:block;height:100%;width:0;background:var(--accent)}
+.status{display:flex;align-items:center;gap:8px;min-height:22px;margin-bottom:8px;color:var(--muted);font-size:.85rem}
+#dot{width:9px;height:9px;border-radius:50%;background:var(--dim);flex:none}
+#dot.on{background:var(--accent);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+#stat{flex:none}
+#heard{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{flex:1 1 22%;min-height:46px;padding:0 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:.95rem;cursor:pointer;white-space:nowrap}
+.btn:active{background:var(--line)}
+.btn.rec{border-color:var(--warn);color:var(--warn);font-weight:700}
+#out{position:fixed;left:12px;bottom:calc(190px + env(safe-area-inset-bottom,0px));width:min(30vw,240px);height:auto;border-radius:8px;border:1px solid var(--line);background:#000;z-index:3;pointer-events:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:800}
+.btn.hot{border-color:var(--accent);color:var(--accent)}
+#out.port{width:min(20vw,140px)}
+
+#cam{position:absolute;top:0;right:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.3;background:#000}
+#recTag{flex:none;color:var(--warn);font-weight:600;font-variant-numeric:tabular-nums}
+#recTag::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-inline-end:6px;animation:pulse 1.4s ease-in-out infinite}
+#result{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;background:var(--bg);overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(12px + env(safe-area-inset-bottom,0px))}
+#result .inner{max-width:560px;height:100%;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+#result h1{font-size:1.3rem;margin:0;flex:none}
+#result .verdict{flex:none;font-size:.95rem}
+#result details{flex:none}
+.actions{display:flex;gap:10px;flex:none}
+.actions>*{flex:1;min-height:56px;border-radius:12px;font-weight:800;font-size:1.05rem;display:flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer}
+.btn2{background:var(--surface);color:var(--fg);border:1px solid var(--line)}
+#result video{flex:1 1 0;min-height:120px;width:100%;object-fit:contain;background:#000;border-radius:10px}
+.verdict{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:600}
+.verdict.bad{border-color:var(--warn)}
+.linkbtn{display:flex;align-items:center;justify-content:center;min-height:54px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:800;text-decoration:none}
+details summary{color:var(--muted);cursor:pointer}
+#report{min-height:110px;margin-top:8px;direction:ltr;font:.8rem/1.4 ui-monospace,Menlo,monospace}
+
+@media (max-height:520px){
+  #bar{padding-top:14px}
+  .meter{margin-bottom:6px}
+  .status{margin-bottom:4px}
+  .btns{gap:6px}
+  .btn{min-height:36px;flex:1 1 11%;font-size:.8rem;padding:0 6px}
+  #out{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+  .setup{gap:6px}
+}
+@media (prefers-reduced-motion:reduce){
+  #recTag::before{animation:none}
+  .w{transition:none}
+  #dot.on{animation:none}
+}
+</style>
+</head>
+<body>
+
+<main class="setup" id="setup">
+  <header class="top"><h1>טלפרומפטר קולי</h1><span id="count" class="muted"></span></header>
+  <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
+  <section class="panel">
+    <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
+      <label><input type="radio" name="mode" value="voice"><span>לפי הקול</span></label>
+      <label><input type="radio" name="mode" value="auto"><span>גלילה אוטומטית</span></label>
+    </div>
+    <div class="grid2">
+      <div class="ctl"><div class="row"><label for="fs">גודל טקסט</label><output id="fsOut"></output></div><input type="range" id="fs" min="28" max="110" step="2"></div>
+      <div class="ctl"><div class="row"><label for="anchor" title="ככל שהשורה גבוהה יותר היא קרובה יותר לעדשה הקדמית">גובה השורה</label><output id="anchorOut"></output></div><input type="range" id="anchor" min="0" max="50" step="1"></div>
+      <div class="ctl"><div class="row"><label for="colw" title="עמודה צרה וממורכזת מקטינה את תנועת העיניים">רוחב הטקסט</label><output id="colwOut"></output></div><input type="range" id="colw" min="20" max="100" step="2"></div>
+      <div class="ctl" id="rowLang"><div class="row"><label for="lang">שפת דיבור</label></div>
+        <select id="lang"><option value="he-IL">עברית</option><option value="en-US">English</option></select></div>
+      <div class="ctl" id="rowLead"><div class="row"><label for="lead" title="כמה מילים קדימה להציג, כדי לפצות על השהיית הזיהוי">תגובה</label></div>
+        <select id="lead"><option value="0">מדויקת</option><option value="1">מהירה</option><option value="2">מהירה מאוד</option></select></div>
+      <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="15" max="140" step="5"></div>
+      <div class="ctl" id="rowOrient"><div class="row"><label for="orient" title="כיוון הסרטון שנשמר, בלי קשר לכיוון המסך">כיוון הסרטון</label></div>
+        <select id="orient"><option value="auto">לפי המסך</option><option value="land">לרוחב (16:9)</option><option value="port">לאורך (9:16)</option></select></div>
+      <div class="ctl" id="rowQual"><div class="row"><label for="qual">איכות</label></div>
+        <select id="qual"><option value="720">720p</option><option value="1080">1080p</option></select></div>
+      <div class="ctl" id="rowCapPos"><div class="row"><label for="capPos">מיקום כתוביות בסרטון</label></div>
+        <select id="capPos"><option value="low">למטה</option><option value="mid">באמצע</option><option value="top">למעלה</option></select></div>
+    </div>
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="full"> מסך מלא</label>
+      <label class="check"><input type="checkbox" id="mirror"> הפוך אופקית</label>
+      <label class="check"><input type="checkbox" id="fade"> טשטוש שורות רחוקות</label>
+      <label class="check"><input type="checkbox" id="record"> הקלט וידאו</label>
+      <label class="check"><input type="checkbox" id="burn"> כתוביות בתוך הסרטון</label>
+    </div>
+    <p class="note" id="support" hidden></p>
+    <p class="hint" id="fsHint" hidden>באייפון אין מסך מלא מתוך Safari. לחץ שיתוף, "הוסף למסך הבית", ופתח את הטלפרומפטר משם.</p>
+    <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה" ואז "שמור סרטון". "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
+  </section>
+  <button class="go" id="go" type="button">התחל</button>
+  <p class="err" id="err" role="alert" hidden></p>
+</main>
+
+<div id="prompter" hidden>
+  <video id="cam" muted playsinline autoplay hidden></video>
+  <div id="stage"><div id="script"></div></div>
+  <i class="tick r"></i><i class="tick l"></i>
+  <canvas id="out" hidden></canvas>
+  <div id="bar">
+    <div class="meter"><i id="progress"></i></div>
+    <div class="status"><span id="dot"></span><span id="recTag" hidden></span><span id="stat"></span><span id="heard"></span></div>
+    <div class="btns">
+      <button class="btn primary" id="exit" type="button">סיום</button>
+      <button class="btn" id="fullBtn" type="button">מסך מלא</button>
+      <button class="btn" id="pause" type="button">השהה</button>
+      <button class="btn" id="modeBtn" type="button">מצב: קול</button>
+      <button class="btn rec" id="recBtn" type="button">● הקלט</button>
+      <button class="btn" id="prevS" type="button">משפט קודם</button>
+      <button class="btn" id="nextS" type="button">משפט הבא</button>
+      <button class="btn" id="fsMinus" type="button" aria-label="הקטן טקסט">A−</button>
+      <button class="btn" id="fsPlus" type="button" aria-label="הגדל טקסט">A+</button>
+      <button class="btn" id="colMinus" type="button" aria-label="עמודה צרה יותר">עמודה צרה</button>
+      <button class="btn" id="colPlus" type="button" aria-label="עמודה רחבה יותר">עמודה רחבה</button>
+      <button class="btn" id="lineUp" type="button" aria-label="הקו למעלה">קו ↑</button>
+      <button class="btn" id="lineDown" type="button" aria-label="הקו למטה">קו ↓</button>
+    </div>
+  </div>
+</div>
+
+<div id="result" hidden>
+  <div class="inner">
+    <h1>ההקלטה מוכנה</h1>
+    <video id="playback" controls playsinline></video>
+    <div class="verdict" id="verdict"></div>
+    <div class="actions">
+      <a class="linkbtn" id="dl" download>שמור סרטון</a>
+      <button class="btn2" id="back" type="button">חזרה</button>
+    </div>
+    <details><summary>פרטים טכניים</summary><textarea id="report" readonly aria-label="פרטים טכניים"></textarea></details>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+
+/* ============ matching logic (pure, no DOM) ============ */
+// <pure>
+const FINAL = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' };
+function norm(w) {
+  return String(w).toLowerCase().replace(/[^\p{L}\p{N}]/gu, '').replace(/[ךםןףץ]/g, c => FINAL[c]);
+}
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+const PREFIX = 'והבכלמש';
+function similar(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const la = a.length, lb = b.length;
+  if (Math.min(la, lb) < 2) return false;
+  if (la >= 3 && PREFIX.includes(a[0]) && a.slice(1) === b) return true;
+  if (lb >= 3 && PREFIX.includes(b[0]) && b.slice(1) === a) return true;
+  const m = Math.max(la, lb);
+  const tol = m >= 8 ? 2 : m >= 4 ? 1 : 0;
+  if (Math.abs(la - lb) > tol) return false;
+  return lev(a, b) <= tol;
+}
+// words: [{n}] normalized script words; pos: index of the next word to be said;
+// heard: normalized words heard so far. Returns the new pos, or -1 when nothing matches.
+function findNext(words, pos, heard) {
+  if (!heard.length || pos >= words.length) return -1;
+  for (let k = Math.min(3, heard.length); k >= 1; k--) {
+    const seq = heard.slice(-k);
+    const back = k === 3 ? 8 : 0;
+    const fwd = k === 1 ? 3 : 60;
+    let bestNp = -1, bestScore = Infinity;
+    for (let np = Math.max(k, pos - back); np <= Math.min(words.length, pos + fwd); np++) {
+      if (k === 1) {
+        if (np === pos) continue;
+        if (np > pos + 1 && seq[0].length < 3) continue;
+      }
+      const s = np - k;
+      let ok = true;
+      for (let t = 0; t < k; t++) {
+        if (!similar(words[s + t].n, seq[t])) { ok = false; break; }
+      }
+      if (!ok) continue;
+      const score = np >= pos ? np - pos : (pos - np) + 15;
+      if (score < bestScore) { bestScore = score; bestNp = np; }
+    }
+    if (bestNp >= 0) return bestNp;
+  }
+  return -1;
+}
+// </pure>
+
+/* ============ settings ============ */
+const SAMPLE = [
+  'שלום לכולם, ברוכים הבאים לסרטון חדש.',
+  'היום נדבר על נפילה חופשית.',
+  'כשאנחנו מפילים כדור מגובה מסוים, הוא לא נופל במהירות קבועה. הוא מאיץ.',
+  'התאוצה של כל גוף בנפילה חופשית היא בערך עשרה מטר לשנייה בריבוע, וזה לא תלוי במסה.',
+  'אז למה נדמה לנו שנוצה נופלת לאט יותר מאבן? התשובה היא התנגדות האוויר.',
+  'בואו נראה את זה בסימולציה.'
+].join('\n');
+
+const KEY = 'tp.voice.v1';
+let cfg = { text: SAMPLE, fs: 56, anchor: 3, mirror: false, mode: 'voice', speed: 45, lang: 'he-IL', record: false, lead: 1, burn: false, colw: null, fade: true, orient: 'auto', qual: 720, capPos: 'low', full: true, ver: 2 };
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    if (saved.ver !== 2) { delete saved.anchor; delete saved.colw; }   // new defaults for the narrow centred layout
+    cfg = { ...cfg, ...saved, ver: 2 };
+  }
+} catch (e) {}
+if (!SR) cfg.mode = 'auto';
+const colw = () => (cfg.colw == null ? (innerWidth < 700 ? 92 : innerHeight < 520 ? 60 : 34) : cfg.colw);
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} };
+
+/* ============ setup screen ============ */
+const text = $('#text'), fsIn = $('#fs'), anchorIn = $('#anchor'), speedIn = $('#speed');
+const mirrorIn = $('#mirror'), langSel = $('#lang'), errEl = $('#err');
+
+function countWords(s) { return s.split(/\s+/).filter(w => norm(w)).length; }
+function updateCount() {
+  const n = countWords(text.value);
+  const sec = Math.round(n / 130 * 60);
+  const t = sec < 90 ? sec + ' שניות' : (sec / 60).toFixed(1) + ' דקות';
+  $('#count').textContent = n ? n + ' מילים · כ-' + t : '';
+}
+function syncOutputs() {
+  $('#fsOut').textContent = cfg.fs + 'px';
+  $('#anchorOut').textContent = cfg.anchor + '% מהמסך';
+  $('#colwOut').textContent = colw() + '%';
+  $('#speedOut').textContent = cfg.speed + ' px לשנייה';
+}
+function applyModeUI() {
+  $('#rowLang').hidden = cfg.mode !== 'voice';
+  $('#rowLead').hidden = cfg.mode !== 'voice';
+  $('#rowSpeed').hidden = cfg.mode !== 'auto';
+}
+text.value = cfg.text;
+const colwIn = $('#colw'), fadeIn = $('#fade');
+fsIn.value = cfg.fs; anchorIn.value = cfg.anchor; speedIn.value = cfg.speed; colwIn.value = colw(); fadeIn.checked = !!cfg.fade;
+mirrorIn.checked = cfg.mirror; langSel.value = cfg.lang;
+syncOutputs(); updateCount(); applyModeUI();
+
+text.addEventListener('input', () => { cfg.text = text.value; save(); updateCount(); errEl.hidden = true; });
+fsIn.addEventListener('input', () => { cfg.fs = +fsIn.value; save(); syncOutputs(); });
+anchorIn.addEventListener('input', () => { cfg.anchor = +anchorIn.value; save(); syncOutputs(); });
+colwIn.addEventListener('input', () => { cfg.colw = +colwIn.value; save(); syncOutputs(); });
+fadeIn.addEventListener('change', () => { cfg.fade = fadeIn.checked; save(); });
+speedIn.addEventListener('input', () => { cfg.speed = +speedIn.value; save(); syncOutputs(); });
+mirrorIn.addEventListener('change', () => { cfg.mirror = mirrorIn.checked; save(); });
+const recordIn = $('#record');
+recordIn.checked = !!cfg.record && canRecord;
+if (!canRecord) {
+  recordIn.disabled = true;
+  $('#recHint').textContent = !window.isSecureContext
+    ? 'אין גישה למצלמה כי הדף נפתח כקובץ מקומי ולא מכתובת https. בטלפון זה תמיד המצב כשפותחים קובץ שהורדת. העלה את הקובץ לאתר שלך ופתח אותו משם. הטלפרומפטר עצמו ממשיך לעבוד.'
+    : 'הדפדפן הזה לא תומך בהקלטת וידאו מתוך דף (באייפון נדרש iOS 14.3 ומעלה). הטלפרומפטר עצמו ממשיך לעבוד.';
+  $('#recHint').style.color = 'var(--warn)';
+}
+recordIn.addEventListener('change', () => { cfg.record = recordIn.checked; save(); });
+const burnIn = $('#burn');
+burnIn.checked = !!cfg.burn && canRecord;
+burnIn.disabled = !canRecord;
+burnIn.addEventListener('change', () => { cfg.burn = burnIn.checked; save(); });
+langSel.addEventListener('change', () => { cfg.lang = langSel.value; save(); });
+const leadSel = $('#lead');
+leadSel.value = String(cfg.lead);
+leadSel.addEventListener('change', () => { cfg.lead = +leadSel.value; save(); });
+document.querySelectorAll('input[name=mode]').forEach(r => {
+  r.checked = r.value === cfg.mode;
+  if (r.value === 'voice' && !SR) r.disabled = true;
+  r.addEventListener('change', () => { if (r.checked) { cfg.mode = r.value; save(); applyModeUI(); } });
+});
+
+const canFull = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+const fullIn = $('#full'), orientSel = $('#orient'), qualSel = $('#qual'), capPosSel = $('#capPos');
+fullIn.checked = !!cfg.full && canFull;
+fullIn.disabled = !canFull;
+orientSel.value = cfg.orient; qualSel.value = String(cfg.qual); capPosSel.value = cfg.capPos;
+function applyRecUI() {
+  const r = recordIn.checked && canRecord;
+  $('#rowOrient').hidden = !r;
+  $('#rowQual').hidden = !r;
+  $('#rowCapPos').hidden = !(r && burnIn.checked);
+}
+fullIn.addEventListener('change', () => { cfg.full = fullIn.checked; save(); });
+orientSel.addEventListener('change', () => { cfg.orient = orientSel.value; save(); });
+qualSel.addEventListener('change', () => { cfg.qual = +qualSel.value; save(); });
+capPosSel.addEventListener('change', () => { cfg.capPos = capPosSel.value; save(); });
+recordIn.addEventListener('change', applyRecUI);
+burnIn.addEventListener('change', applyRecUI);
+applyRecUI();
+$('#fsHint').hidden = canFull;
+
+const support = $('#support');
+if (!SR) {
+  support.textContent = 'הדפדפן הזה לא תומך בזיהוי דיבור. השתמש ב-Chrome (מחשב או אנדרואיד) או ב-Safari עדכני. גלילה אוטומטית עובדת בכל דפדפן.';
+  support.hidden = false;
+} else if (!window.isSecureContext) {
+  support.textContent = 'זיהוי דיבור דורש כתובת https. העלה את הקובץ לאתר שלך, או השתמש בגלילה אוטומטית.';
+  support.hidden = false;
+}
+
+/* ============ prompter ============ */
+const prompter = $('#prompter'), stage = $('#stage'), scriptEl = $('#script');
+const dot = $('#dot'), statEl = $('#stat'), heardEl = $('#heard');
+let words = [], starts = [];
+let pos = 0, paintedPos = 0;
+let running = false, paused = false, mode = 'voice';
+let target = 0, curY = 0, tickY = 120, raf = 0, lastT = 0, lastSync = 0;
+
+function build() {
+  scriptEl.textContent = '';
+  words = [];
+  cfg.text.split(/\n+/).map(s => s.trim()).filter(Boolean).forEach(line => {
+    const p = document.createElement('p');
+    let first = true;
+    line.split(/\s+/).forEach(raw => {
+      const n = norm(raw);
+      if (!n) { p.appendChild(document.createTextNode(raw + ' ')); return; }
+      const el = document.createElement('span');
+      el.className = 'w';
+      el.textContent = raw;
+      el.dataset.i = String(words.length);
+      p.appendChild(el);
+      p.appendChild(document.createTextNode(' '));
+      words.push({ raw, n, el, para: first, end: /[.!?…]["'”׳״)]*$/.test(raw) });
+      first = false;
+    });
+    scriptEl.appendChild(p);
+  });
+  starts = [];
+  words.forEach((w, i) => { if (i === 0 || w.para || words[i - 1].end) starts.push(i); });
+}
+
+function applyLayout() {
+  const anchor = Math.round(innerHeight * cfg.anchor / 100);
+  tickY = anchor + cfg.fs * 1.55 / 2;
+  prompter.style.setProperty('--fs', cfg.fs + 'px');
+  prompter.style.setProperty('--anchor', anchor + 'px');
+  prompter.style.setProperty('--tick', tickY + 'px');
+  prompter.style.setProperty('--colwid', 'min(calc(100vw - 24px), max(260px, ' + colw() + 'vw))');
+  const lh = cfg.fs * 1.55;
+  prompter.style.setProperty('--mask', cfg.fade ? 'linear-gradient(to bottom,#000 0,#000 ' + Math.round(tickY + lh * 2.2) + 'px,transparent ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none');
+}
+
+function maxScroll() { return Math.max(0, stage.scrollHeight - stage.clientHeight); }
+
+function aim(instant) {
+  if (!words.length) return;
+  const w = words[Math.min(view(), words.length - 1)];
+  const r = w.el.getBoundingClientRect();
+  const s = scriptEl.getBoundingClientRect();
+  const y = (r.top - s.top) + r.height / 2;
+  target = clamp(y - tickY, 0, maxScroll());
+  if (instant) { curY = target; stage.scrollTop = curY; }
+}
+
+// pos = last word matched by the recognizer; view() = what is shown as current.
+// In voice mode the view runs cfg.lead words ahead of pos, to cover the recognizer's delay.
+function view() { return Math.min(words.length, pos + (mode === 'voice' && pos > 0 ? cfg.lead : 0)); }
+function paintAll() {
+  const v = view();
+  words.forEach((w, i) => {
+    w.el.classList.toggle('done', i < v);
+    w.el.classList.toggle('cur', i === v);
+  });
+  paintedPos = v;
+  updateProgress();
+}
+function paint() {
+  const v = view();
+  const lo = Math.min(paintedPos, v), hi = Math.max(paintedPos, v);
+  for (let i = lo; i <= hi && i < words.length; i++) {
+    words[i].el.classList.toggle('done', i < v);
+    words[i].el.classList.toggle('cur', i === v);
+  }
+  paintedPos = v;
+  updateProgress();
+}
+function updateProgress() {
+  $('#progress').style.width = (words.length ? view() / words.length * 100 : 0) + '%';
+}
+function setPos(p) {
+  pos = clamp(p, 0, words.length);
+  paint();
+  aim(false);
+  if (view() >= words.length && mode === 'voice') setStat('סוף הטקסט', false);
+}
+function jumpTo(p) {
+  lastSync = Date.now();
+  setPos(p - (mode === 'voice' ? cfg.lead : 0));
+  if (mode === 'voice' && !paused) { stopRec(); startRec(); }
+}
+function nextSentence() {
+  const n = starts.find(i => i > view());
+  jumpTo(n === undefined ? words.length : n);
+}
+function prevSentence() {
+  let p = 0;
+  for (const i of starts) { if (i < view()) p = i; else break; }
+  jumpTo(p);
+}
+
+function setStat(msg, listening) {
+  statEl.textContent = msg;
+  dot.classList.toggle('on', !!listening);
+}
+
+/* scroll loop */
+function loop(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000 || 0);
+  lastT = t;
+  if (analyser) {
+    analyser.getByteTimeDomainData(abuf);
+    let m = 0;
+    for (let i = 0; i < abuf.length; i++) { const d = Math.abs(abuf[i] - 128) / 128; if (d > m) m = d; }
+    if (m > peak) peak = m;
+  }
+  if (useCv && outCtx && camStream) drawOut();
+  if (mode === 'auto' && !paused && started) {
+    target = Math.min(maxScroll(), target + cfg.speed * dt);
+    if (target >= maxScroll() - 0.5) setStat('סוף הטקסט', false);
+  }
+  const diff = target - curY;
+  curY += Math.abs(diff) < 0.3 ? diff : diff * Math.min(1, dt * 16);
+  stage.scrollTop = curY;
+  raf = requestAnimationFrame(loop);
+}
+
+/* speech recognition */
+let rec = null, fatal = false;
+function stopRec() {
+  if (!rec) return;
+  const r = rec;
+  rec = null;
+  r.onresult = r.onend = r.onerror = r.onstart = null;
+  try { r.abort(); } catch (e) {}
+}
+function startRec() {
+  if (!SR || !running || paused || mode !== 'voice' || fatal) return;
+  stopRec();
+  const r = new SR();
+  rec = r;
+  if (recording) usedVoice = true;
+  r.lang = cfg.lang;
+  r.continuous = true;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+  r.onstart = () => setStat('מקשיב…', true);
+  r.onresult = onResult;
+  r.onerror = ev => {
+    const e = ev.error;
+    if (e === 'not-allowed' || e === 'service-not-allowed') {
+      fatal = true;
+      setStat('אין הרשאה למיקרופון. אשר גישה בדפדפן (נדרשת כתובת https).', false);
+    } else if (e === 'audio-capture') {
+      fatal = true;
+      setStat('לא נמצא מיקרופון.', false);
+    } else if (e === 'network') {
+      setStat('זיהוי הדיבור דורש חיבור לאינטרנט.', false);
+    } else if (e === 'language-not-supported') {
+      fatal = true;
+      setStat('השפה לא נתמכת בדפדפן הזה.', false);
+    }
+  };
+  r.onend = () => {
+    if (rec !== r) return;
+    if (running && !paused && mode === 'voice' && !fatal) {
+      setTimeout(() => { if (rec === r && running && !paused && mode === 'voice') { try { r.start(); } catch (e) {} } }, 60);
+    } else {
+      setStat(fatal ? statEl.textContent : 'לא מקשיב', false);
+    }
+  };
+  try { r.start(); } catch (e) {}
+}
+function onResult(e) {
+  speechEvents++;
+  let t = '';
+  for (let i = 0; i < e.results.length; i++) t += ' ' + e.results[i][0].transcript;
+  const raw = t.trim().split(/\s+/).filter(Boolean);
+  const heard = [], shown = [];
+  raw.forEach(r => { const n = norm(r); if (n) { heard.push(n); shown.push(r); } });
+  if (!heard.length) return;
+  heardEl.textContent = shown.slice(-6).join(' ');
+  const np = findNext(words, pos, heard);
+  if (np >= 0) {
+    lastSync = Date.now();
+    if (np !== pos) setPos(np);
+  }
+  if (pos >= words.length) return;
+  if (Date.now() - lastSync > 8000) setStat('לא מצליח לעקוב. הקש על המילה שאתה נמצא בה.', true);
+  else setStat('מקשיב…', true);
+}
+
+/* fullscreen: hides the browser tabs and address bar */
+let wantFull = false;
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+function enterFull() {
+  const el = document.documentElement, rf = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!rf) return;
+  try { const p = rf.call(el, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function exitFull() {
+  if (!fsEl()) return;
+  const ex = document.exitFullscreen || document.webkitExitFullscreen;
+  try { const p = ex && ex.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function lockOrient() {
+  const o = cfg.orient;
+  if (!cfg.record || o === 'auto' || !(screen.orientation && screen.orientation.lock)) return;
+  try { const p = screen.orientation.lock(o === 'port' ? 'portrait' : 'landscape'); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function unlockOrient() { try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {} }
+function syncFull() {
+  const b = $('#fullBtn');
+  b.hidden = !canFull;
+  b.textContent = fsEl() ? 'צא ממסך מלא' : 'מסך מלא';
+  b.classList.toggle('hot', running && wantFull && !fsEl());
+}
+function onFsChange() {
+  syncFull();
+  if (fsEl()) lockOrient(); else unlockOrient();
+  if (running) setTimeout(() => { applyLayout(); aim(true); }, 150);
+}
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
+function orientHint() {
+  if (!cfg.record || cfg.orient === 'auto' || !navigator.maxTouchPoints) return '';
+  const isLand = innerWidth >= innerHeight;
+  if (cfg.orient === 'land' && !isLand) return ' · סובב את הטלפון לרוחב';
+  if (cfg.orient === 'port' && isLand) return ' · סובב את הטלפון לאורך';
+  return '';
+}
+
+/* wake lock */
+let wl = null;
+async function lockScreen() { try { wl = await navigator.wakeLock.request('screen'); } catch (e) {} }
+function unlockScreen() { try { if (wl) wl.release(); } catch (e) {} wl = null; }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && running) lockScreen(); });
+
+/* modes */
+function posFromScroll() {
+  for (let i = 0; i < words.length; i++) {
+    const el = words[i].el;
+    if (el.offsetTop + el.offsetHeight / 2 - curY >= tickY - 2) return i;
+  }
+  return words.length;
+}
+function renderModeBtn() { $('#modeBtn').textContent = mode === 'voice' ? 'מצב: קול' : 'מצב: גלילה'; }
+function setMode(m) {
+  if (m === 'voice' && !SR) { setStat('אין תמיכה בזיהוי דיבור בדפדפן הזה.', false); return; }
+  stopRec();
+  const was = mode;
+  mode = m;
+  cfg.mode = m;
+  save();
+  renderModeBtn();
+  if (m === 'voice') {
+    if (was === 'auto') { pos = Math.max(0, posFromScroll() - cfg.lead); paintAll(); }
+    lastSync = Date.now();
+    aim(false);
+    if (!paused) startRec(); else setStat('מושהה', false);
+  } else {
+    target = curY;
+    setStat(paused ? 'מושהה' : 'גלילה אוטומטית', !paused);
+  }
+}
+function setPaused(v) {
+  paused = v;
+  $('#pause').textContent = v ? 'המשך' : 'השהה';
+  if (v) { stopRec(); setStat('מושהה', false); }
+  else if (mode === 'voice') { lastSync = Date.now(); startRec(); }
+  else setStat('גלילה אוטומטית', true);
+}
+
+/* recording */
+let started = false, usedVoice = false;
+let camStream = null, mr = null, chunks = [], mime = '', recording = false, recStart = 0, recTimer = 0;
+let speechEvents = 0, peak = 0, acx = null, analyser = null, abuf = null, trackMuted = false, recErrors = [];
+let resultUrl = '', resultFile = null;
+let camWhy = '';
+let burn = false, useCv = false, burnUsed = false, outCtx = null, capChunks = [], capOf = [], capIdx = 0, capIdxT = 0, recBusy = false;
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function startCamera() {
+  recErrors = []; camWhy = ''; speechEvents = 0; peak = 0; trackMuted = false; chunks = []; mr = null;
+  // created inside the tap, before any await, so mobile browsers let the audio meter run
+  try { acx = new (window.AudioContext || window.webkitAudioContext)(); acx.resume(); } catch (e) { acx = null; }
+  try {
+    const hq = cfg.qual === 1080;
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'user' }, width: { ideal: hq ? 1920 : 1280 }, height: { ideal: hq ? 1080 : 720 }, frameRate: { ideal: 30 } },
+        audio: true
+      });
+    } catch (e1) {
+      if (e1 && (e1.name === 'NotAllowedError' || e1.name === 'SecurityError')) throw e1;
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });   // plain retry for picky phones
+    }
+  } catch (e) {
+    camStream = null;
+    recErrors.push('getUserMedia:' + (e && e.name));
+    const nm = e && e.name;
+    camWhy = nm === 'NotAllowedError' ? 'ההרשאה למצלמה או למיקרופון נדחתה. אשר בהגדרות האתר בדפדפן.'
+      : nm === 'NotFoundError' ? 'לא נמצאה מצלמה או מיקרופון.'
+      : nm === 'NotReadableError' ? 'המצלמה תפוסה על ידי אפליקציה אחרת. סגור אותה ונסה שוב.'
+      : nm === 'SecurityError' ? 'הדף חייב להיפתח מכתובת https.' : '';
+    if (acx) { try { acx.close(); } catch (e2) {} acx = null; }
+    return false;
+  }
+  const cam = $('#cam');
+  cam.srcObject = camStream;
+  cam.hidden = false;
+  try { const pl = cam.play(); if (pl && pl.catch) pl.catch(() => {}); } catch (e) {}
+  if (acx) {
+    try {
+      analyser = acx.createAnalyser();
+      analyser.fftSize = 1024;
+      acx.createMediaStreamSource(camStream).connect(analyser);
+      abuf = new Uint8Array(analyser.fftSize);
+    } catch (e) { analyser = null; recErrors.push('audioContext:' + (e && e.name)); }
+  }
+  const at = camStream.getAudioTracks()[0];
+  if (at) at.onmute = () => { trackMuted = true; };
+  burn = !!cfg.burn;
+  useCv = burn || cfg.orient !== 'auto';
+  if (useCv) {
+    await new Promise(res => {
+      if (cam.videoWidth) { res(); return; }
+      cam.onloadedmetadata = () => res();
+      setTimeout(res, 2500);
+    });
+    const cv = $('#out');
+    const d = outDims();
+    cv.width = d.W; cv.height = d.H;
+    cv.classList.toggle('port', d.H > d.W);
+    outCtx = cv.getContext('2d');
+    if (outCtx) { cv.hidden = false; if (burn) buildCaps(); } else { burn = false; useCv = false; }
+  }
+  return true;
+}
+
+function outDims() {
+  const land = cfg.orient === 'land' || (cfg.orient === 'auto' && innerWidth >= innerHeight);
+  const h = cfg.qual === 1080 ? 1080 : 720, w = Math.round(h * 16 / 9);
+  return land ? { W: w, H: h } : { W: h, H: w };
+}
+
+/* burned-in captions: short phrases, current word highlighted */
+function buildCaps() {
+  const port = $('#out').height > $('#out').width;
+  const maxChars = port ? 16 : 26, maxWords = port ? 4 : 6;
+  capChunks = []; capOf = new Array(words.length);
+  let i = 0;
+  while (i < words.length) {
+    let j = i, chars = 0;
+    while (j < words.length) {
+      const len = words[j].raw.length + 1;
+      if (j > i && (chars + len > maxChars || j - i >= maxWords)) break;
+      chars += len; j++;
+      if (words[j - 1].end) break;
+    }
+    capChunks.push({ from: i, to: j });
+    for (let k = i; k < j; k++) capOf[k] = capChunks.length - 1;
+    i = j;
+  }
+}
+function captionWord() {
+  if (mode === 'voice') return clamp(view(), 0, words.length - 1);
+  const t = performance.now();
+  if (t - capIdxT > 150) { capIdxT = t; capIdx = clamp(posFromScroll(), 0, words.length - 1); }
+  return capIdx;
+}
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+function drawOut() {
+  const cam = $('#cam'), cv = $('#out'), c = outCtx;
+  if (!c || cam.readyState < 2) return;
+  const W = cv.width, H = cv.height;
+  const vw = cam.videoWidth || W, vh = cam.videoHeight || H;
+  const sc = Math.max(W / vw, H / vh), dw = vw * sc, dh = vh * sc;
+  c.drawImage(cam, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  if (!burn || !words.length) return;
+  const wi = captionWord();
+  const ch = capChunks[capOf[wi]];
+  if (!ch) return;
+  const arr = words.slice(ch.from, ch.to), cur = wi - ch.from;
+  const rtl = /[֐-׿]/.test(arr.map(w => w.raw).join(''));
+  let fsz = Math.round(Math.min(W, H) * (H > W ? 0.085 : 0.075)), gap = 0, widths = [], total = 0;
+  const measure = () => {
+    c.font = '800 ' + fsz + 'px Heebo, system-ui, "Segoe UI", Arial, sans-serif';
+    gap = fsz * 0.32;
+    widths = arr.map(w => c.measureText(w.raw).width);
+    total = widths.reduce((a, b) => a + b, 0) + gap * (arr.length - 1);
+  };
+  c.direction = rtl ? 'rtl' : 'ltr';
+  c.textBaseline = 'middle';
+  c.textAlign = rtl ? 'right' : 'left';
+  measure();
+  if (total > W * 0.9) { fsz = Math.max(18, Math.floor(fsz * W * 0.9 / total)); measure(); }
+  const y = H * (cfg.capPos === 'top' ? 0.14 : cfg.capPos === 'mid' ? 0.5 : H > W ? 0.78 : 0.84), padX = fsz * 0.5, padY = fsz * 0.45;
+  c.fillStyle = 'rgba(0,0,0,.5)';
+  rr(c, (W - total) / 2 - padX, y - fsz / 2 - padY, total + padX * 2, fsz + padY * 2, fsz * 0.35);
+  c.fill();
+  let x = rtl ? (W + total) / 2 : (W - total) / 2;
+  arr.forEach((w, k) => {
+    const wd = widths[k], x0 = rtl ? x - wd : x;
+    if (k === cur) {
+      c.fillStyle = '#ffd166';
+      rr(c, x0 - fsz * 0.12, y - fsz * 0.62, wd + fsz * 0.24, fsz * 1.24, fsz * 0.2);
+      c.fill();
+    }
+    c.fillStyle = k === cur ? '#14110a' : '#ffffff';
+    c.fillText(w.raw, x, y);
+    x += rtl ? -(wd + gap) : (wd + gap);
+  });
+}
+
+function beginRecording() {
+  if (!camStream || recording) return false;
+  let src = camStream;
+  if (useCv && outCtx) {
+    try {
+      const cs = $('#out').captureStream(30);
+      const at = camStream.getAudioTracks()[0];
+      if (at) cs.addTrack(at);
+      src = cs;
+    } catch (e) {
+      recErrors.push('captureStream:' + (e && e.name));
+      burn = false; useCv = false;
+      $('#out').hidden = true;
+    }
+  }
+  burnUsed = burn;
+  const types = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+  mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  chunks = [];
+  try {
+    const mo = { videoBitsPerSecond: cfg.qual === 1080 ? 8000000 : 5000000 };
+    if (mime) mo.mimeType = mime;
+    mr = new MediaRecorder(src, mo);
+    mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+    mr.start(1000);
+  } catch (e) {
+    recErrors.push('MediaRecorder:' + (e && e.name));
+    return false;
+  }
+  recording = true;
+  $('#exit').textContent = 'סיום ושמירה';
+  recStart = Date.now();
+  const tag = $('#recTag');
+  tag.hidden = false;
+  tag.textContent = 'מקליט 0:00';
+  recTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - recStart) / 1000);
+    tag.textContent = 'מקליט ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }, 500);
+  syncRecBtn();
+  return true;
+}
+function syncRecBtn() { $('#recBtn').hidden = !canRecord || recording || recBusy; }
+async function recordNow() {
+  if (!running || recording || recBusy || !canRecord) return;
+  recBusy = true; syncRecBtn();
+  const wasVoice = mode === 'voice' && !paused;
+  if (wasVoice) stopRec();
+  setStat('מבקש גישה למצלמה ולמיקרופון…', false);
+  const ok = await startCamera();
+  if (!running) { if (ok) stopCamera(); recBusy = false; return; }
+  let failed = !ok;
+  if (ok) {
+    for (let n = 3; n > 0 && running; n--) { setStat('מקליטים בעוד ' + n + '…' + orientHint(), false); await sleep(1000); }
+    if (running && !beginRecording()) failed = true;
+  }
+  if (failed) { setStat('אי אפשר להקליט. ' + (camWhy || recErrors.join(', ')), false); await sleep(4000); }
+  recBusy = false; syncRecBtn();
+  if (running && wasVoice && !paused) startRec();
+}
+function stopCamera() {
+  clearInterval(recTimer);
+  $('#recTag').hidden = true;
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  if (acx) { try { acx.close(); } catch (e) {} acx = null; }
+  analyser = null;
+  outCtx = null; burn = false; useCv = false;
+  $('#out').hidden = true;
+  $('#exit').textContent = 'סיום';
+  const cam = $('#cam');
+  cam.srcObject = null;
+  cam.hidden = true;
+  recording = false;
+  syncRecBtn();
+}
+function finishRecording() {
+  return new Promise(res => {
+    const done = () => {
+      const blob = new Blob(chunks, { type: mime || 'video/webm' });
+      stopCamera();
+      res(blob);
+    };
+    if (mr && mr.state !== 'inactive') {
+      mr.onstop = done;
+      try { mr.stop(); } catch (e) { done(); }
+    } else done();
+  });
+}
+function showResult(blob, secs) {
+  if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = ''; }
+  const v = $('#playback'), dl = $('#dl'), verdict = $('#verdict');
+  if (blob.size) {
+    resultUrl = URL.createObjectURL(blob);
+    v.src = resultUrl;
+    dl.href = resultUrl;
+    const name = 'video-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + (/mp4/.test(blob.type) ? '.mp4' : '.webm');
+    dl.download = name;
+    resultFile = typeof File === 'function' ? new File([blob], name, { type: blob.type }) : null;
+  }
+  v.hidden = !blob.size;
+  dl.hidden = !blob.size;
+  const srOk = speechEvents > 0, audioOk = peak > 0.03 && !trackMuted;
+  let msg, bad = true;
+  if (!blob.size) msg = 'ההקלטה יצאה ריקה. נסה שוב.';
+  else if (usedVoice) {
+    if (srOk && audioOk) { msg = 'הקלטה וזיהוי קול עבדו יחד. נגן את הסרטון ובדוק שיש בו קול.'; bad = false; }
+    else if (srOk) msg = 'הטקסט עקב אחרי הקול אבל הקול בסרטון יצא שקט. בטלפון הזה ההקלטה והזיהוי הקולי מפריעים זה לזה. עבור למצב גלילה אוטומטית.';
+    else if (audioOk) msg = 'הסרטון קלט קול אבל הטקסט לא התקדם לפי הקול. כנראה שהם מפריעים זה לזה, או שהדיבור לא זוהה. נסה גלילה אוטומטית.';
+    else msg = 'לא נקלט קול. בדוק הרשאות מיקרופון ודבר קרוב יותר.';
+  } else if (audioOk) { msg = 'ההקלטה מוכנה. נגן את הסרטון ובדוק שיש בו קול.'; bad = false; }
+  else msg = 'הסרטון יצא שקט. בדוק את המיקרופון.';
+  verdict.textContent = msg;
+  verdict.classList.toggle('bad', bad);
+  $('#report').value = ['seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
+    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'errors=' + (recErrors.join('|') || 'none'), navigator.userAgent].join('\n');
+  $('#result').hidden = false;
+}
+
+/* open / close */
+async function openPrompter() {
+  errEl.hidden = true;
+  cfg.text = text.value;
+  save();
+  build();
+  if (!words.length) { errEl.textContent = 'הדבק קודם טקסט להקראה.'; errEl.hidden = false; return; }
+  running = true; paused = false; fatal = false;
+  mode = cfg.mode === 'voice' && SR ? 'voice' : 'auto';
+  pos = 0; paintedPos = 0;
+  document.body.classList.toggle('mirror', cfg.mirror);
+  document.documentElement.classList.add('lock');
+  document.body.classList.add('lock');
+  prompter.hidden = false;
+  $('#pause').textContent = 'השהה';
+  heardEl.textContent = '';
+  renderModeBtn();
+  applyLayout();
+  paintAll();
+  stage.scrollTop = 0; curY = 0; target = 0;
+  requestAnimationFrame(() => { applyLayout(); aim(true); });
+  lockScreen();
+  wantFull = !!cfg.full && canFull;
+  if (wantFull) enterFull();
+  syncFull();
+  lastSync = Date.now();
+  started = false; usedVoice = false;
+  cancelAnimationFrame(raf);
+  lastT = performance.now();
+  raf = requestAnimationFrame(loop);
+  recBusy = !!(cfg.record && canRecord);
+  syncRecBtn();
+  if (cfg.record && canRecord) {
+    setStat('מבקש גישה למצלמה ולמיקרופון…', false);
+    const ok = await startCamera();
+    if (!running) { if (ok) stopCamera(); recBusy = false; return; }
+    if (!ok) {
+      setStat('אי אפשר להקליט. ' + (camWhy || recErrors.join(', ')) + ' ממשיך בלי הקלטה.', false);
+      await sleep(4500);
+    } else {
+      for (let n = 3; n > 0 && running; n--) { setStat('מתחילים בעוד ' + n + '…' + orientHint(), false); await sleep(1000); }
+      if (running && !beginRecording()) {
+        setStat('אי אפשר להקליט (' + recErrors.join(', ') + '). ממשיך בלי הקלטה.', false);
+        await sleep(2000);
+      }
+    }
+    recBusy = false;
+    syncRecBtn();
+    if (!running) return;
+  }
+  started = true;
+  lastSync = Date.now();
+  if (mode === 'voice') startRec(); else setStat('גלילה אוטומטית', true);
+}
+function closePrompter() {
+  const wasRecording = recording;
+  running = false;
+  started = false;
+  stopRec();
+  cancelAnimationFrame(raf);
+  unlockScreen();
+  prompter.hidden = true;
+  document.documentElement.classList.remove('lock');
+  document.body.classList.remove('lock');
+  wantFull = false;
+  exitFull();
+  unlockOrient();
+  syncFull();
+  recBusy = false;
+  if (wasRecording) {
+    const secs = Math.round((Date.now() - recStart) / 1000);
+    finishRecording().then(blob => showResult(blob, secs));
+  } else if (camStream) {
+    stopCamera();
+  } else {
+    syncRecBtn();
+  }
+}
+function changeCol(d) {
+  cfg.colw = clamp(colw() + d, 20, 100);
+  colwIn.value = cfg.colw;
+  save(); syncOutputs();
+  applyLayout();
+  aim(true);
+}
+function changeAnchor(d) {
+  cfg.anchor = clamp(cfg.anchor + d, 0, 50);
+  anchorIn.value = cfg.anchor;
+  save(); syncOutputs();
+  applyLayout();
+  aim(true);
+}
+function changeFs(d) {
+  cfg.fs = clamp(cfg.fs + d, 28, 110);
+  fsIn.value = cfg.fs;
+  save(); syncOutputs();
+  applyLayout();
+  aim(true);
+}
+
+/* wiring */
+$('#go').addEventListener('click', openPrompter);
+$('#exit').addEventListener('click', closePrompter);
+$('#recBtn').addEventListener('click', recordNow);
+$('#fullBtn').addEventListener('click', () => { if (fsEl()) { wantFull = false; exitFull(); } else { wantFull = true; enterFull(); } syncFull(); });
+// the browser can leave fullscreen (permission prompt, rotation); the next tap brings it back
+prompter.addEventListener('pointerdown', e => {
+  if (running && wantFull && !fsEl() && !e.target.closest('button')) enterFull();
+});
+addEventListener('orientationchange', () => { if (running) setTimeout(() => { applyLayout(); aim(true); }, 250); });
+$('#dl').addEventListener('click', async e => {
+  if (!IOS || !resultFile || !navigator.canShare || !navigator.canShare({ files: [resultFile] })) return;
+  e.preventDefault();
+  try { await navigator.share({ files: [resultFile] }); } catch (err) {}
+});
+$('#back').addEventListener('click', () => {
+  $('#result').hidden = true;
+  const v = $('#playback');
+  v.removeAttribute('src');
+  v.load();
+  if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = ''; }
+});
+$('#pause').addEventListener('click', () => setPaused(!paused));
+$('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'auto' : 'voice'));
+$('#prevS').addEventListener('click', prevSentence);
+$('#nextS').addEventListener('click', nextSentence);
+$('#fsMinus').addEventListener('click', () => changeFs(-4));
+$('#fsPlus').addEventListener('click', () => changeFs(4));
+$('#colMinus').addEventListener('click', () => changeCol(-4));
+$('#colPlus').addEventListener('click', () => changeCol(4));
+$('#lineUp').addEventListener('click', () => changeAnchor(-1));
+$('#lineDown').addEventListener('click', () => changeAnchor(1));
+stage.addEventListener('click', e => {
+  if (mode === 'auto') { setPaused(!paused); return; }
+  const w = e.target.closest('.w');
+  if (w) jumpTo(+w.dataset.i);
+});
+addEventListener('resize', () => { if (running) { applyLayout(); aim(true); } });
+addEventListener('keydown', e => {
+  if (!running) return;
+  if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
+  else if (e.key === 'Escape') closePrompter();
+  else if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); nextSentence(); }
+  else if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); prevSentence(); }
+});
+})();
+</script>
+</body>
+</html>

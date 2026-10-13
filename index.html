@@ -155,7 +155,9 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="lang"><option value="he-IL">עברית</option><option value="en-US">English</option></select></div>
       <div class="ctl" id="rowLead"><div class="row"><label for="lead" title="כמה מילים קדימה להציג, כדי לפצות על השהיית הזיהוי">תגובה</label></div>
         <select id="lead"><option value="0">מדויקת</option><option value="1">מהירה</option><option value="2">מהירה מאוד</option></select></div>
-      <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="15" max="140" step="5"></div>
+      <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
+      <div class="ctl" id="rowLines"><div class="row"><label for="linesSel" title="להציג רק את השורות הקרובות לעדשה">שורות מוצגות</label></div>
+        <select id="linesSel"><option value="0">הכל</option><option value="1">שורה אחת</option><option value="2">שתי שורות</option><option value="3">שלוש שורות</option></select></div>
       <div class="ctl" id="rowOrient"><div class="row"><label for="orient" title="כיוון הסרטון שנשמר, בלי קשר לכיוון המסך">כיוון הסרטון</label></div>
         <select id="orient"><option value="auto">לפי המסך</option><option value="land">לרוחב (16:9)</option><option value="port">לאורך (9:16)</option></select></div>
       <div class="ctl" id="rowQual"><div class="row"><label for="qual">איכות</label></div>
@@ -191,6 +193,9 @@ details summary{color:var(--muted);cursor:pointer}
       <button class="btn" id="fullBtn" type="button">מסך מלא</button>
       <button class="btn" id="pause" type="button">השהה</button>
       <button class="btn" id="modeBtn" type="button">מצב: קול</button>
+      <button class="btn" id="spdMinus" type="button" aria-label="גלילה איטית יותר">לאט −</button>
+      <button class="btn" id="spdPlus" type="button" aria-label="גלילה מהירה יותר">מהר +</button>
+      <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
       <button class="btn rec" id="recBtn" type="button">● הקלט</button>
       <button class="btn" id="prevS" type="button">משפט קודם</button>
       <button class="btn" id="nextS" type="button">משפט הבא</button>
@@ -299,7 +304,7 @@ const SAMPLE = [
 ].join('\n');
 
 const KEY = 'tp.voice.v1';
-let cfg = { text: SAMPLE, fs: 56, anchor: 3, mirror: false, mode: 'voice', speed: 45, lang: 'he-IL', record: false, lead: 1, burn: false, colw: null, fade: true, orient: 'auto', qual: 720, capPos: 'low', full: true, ver: 2 };
+let cfg = { text: SAMPLE, fs: 56, anchor: 3, mirror: false, mode: 'voice', speed: 45, lang: 'he-IL', record: false, lead: 1, burn: false, colw: null, fade: true, orient: 'auto', qual: 720, capPos: 'low', full: true, wpm: 120, lines: 0, ver: 2 };
 try {
   const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
   if (saved && typeof saved === 'object') {
@@ -326,7 +331,7 @@ function syncOutputs() {
   $('#fsOut').textContent = cfg.fs + 'px';
   $('#anchorOut').textContent = cfg.anchor + '% מהמסך';
   $('#colwOut').textContent = colw() + '%';
-  $('#speedOut').textContent = cfg.speed + ' px לשנייה';
+  $('#speedOut').textContent = cfg.wpm + ' מילים לדקה';
 }
 function applyModeUI() {
   $('#rowLang').hidden = cfg.mode !== 'voice';
@@ -335,7 +340,7 @@ function applyModeUI() {
 }
 text.value = cfg.text;
 const colwIn = $('#colw'), fadeIn = $('#fade');
-fsIn.value = cfg.fs; anchorIn.value = cfg.anchor; speedIn.value = cfg.speed; colwIn.value = colw(); fadeIn.checked = !!cfg.fade;
+fsIn.value = cfg.fs; anchorIn.value = cfg.anchor; speedIn.value = cfg.wpm; colwIn.value = colw(); fadeIn.checked = !!cfg.fade;
 mirrorIn.checked = cfg.mirror; langSel.value = cfg.lang;
 syncOutputs(); updateCount(); applyModeUI();
 
@@ -344,7 +349,10 @@ fsIn.addEventListener('input', () => { cfg.fs = +fsIn.value; save(); syncOutputs
 anchorIn.addEventListener('input', () => { cfg.anchor = +anchorIn.value; save(); syncOutputs(); });
 colwIn.addEventListener('input', () => { cfg.colw = +colwIn.value; save(); syncOutputs(); });
 fadeIn.addEventListener('change', () => { cfg.fade = fadeIn.checked; save(); });
-speedIn.addEventListener('input', () => { cfg.speed = +speedIn.value; save(); syncOutputs(); });
+speedIn.addEventListener('input', () => { cfg.wpm = +speedIn.value; save(); syncOutputs(); });
+const linesSel = $('#linesSel');
+linesSel.value = String(cfg.lines);
+linesSel.addEventListener('change', () => { cfg.lines = +linesSel.value; save(); });
 mirrorIn.addEventListener('change', () => { cfg.mirror = mirrorIn.checked; save(); });
 const recordIn = $('#record');
 recordIn.checked = !!cfg.record && canRecord;
@@ -439,7 +447,21 @@ function applyLayout() {
   prompter.style.setProperty('--tick', tickY + 'px');
   prompter.style.setProperty('--colwid', 'min(calc(100vw - 24px), max(260px, ' + colw() + 'vw))');
   const lh = cfg.fs * 1.55;
-  prompter.style.setProperty('--mask', cfg.fade ? 'linear-gradient(to bottom,#000 0,#000 ' + Math.round(tickY + lh * 2.2) + 'px,transparent ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none');
+  let mask = cfg.fade ? 'linear-gradient(to bottom,#000 0,#000 ' + Math.round(tickY + lh * 2.2) + 'px,transparent ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none';
+  if (cfg.lines > 0) {
+    // show only the current line and the next ones, nothing above the eye line
+    const top = Math.round(tickY - lh * 0.62), bot = Math.round(tickY + lh * (cfg.lines - 0.5) + lh * 0.12);
+    mask = 'linear-gradient(to bottom,transparent 0,transparent ' + top + 'px,#000 ' + (top + Math.round(lh * 0.12)) + 'px,#000 ' + (bot - Math.round(lh * 0.1)) + 'px,transparent ' + bot + 'px)';
+  }
+  prompter.style.setProperty('--mask', mask);
+  ppwDirty = true;
+}
+let ppwDirty = true, ppw = 0;
+function calcPpw() {
+  ppwDirty = false;
+  const n = words.length;
+  ppw = n > 1 ? (words[n - 1].el.offsetTop - words[0].el.offsetTop) / (n - 1) : 0;
+  if (!(ppw > 1)) ppw = cfg.fs * 0.5;
 }
 
 function maxScroll() { return Math.max(0, stage.scrollHeight - stage.clientHeight); }
@@ -517,7 +539,8 @@ function loop(t) {
   }
   if (useCv && outCtx && camStream) drawOut();
   if (mode === 'auto' && !paused && started) {
-    target = Math.min(maxScroll(), target + cfg.speed * dt);
+    if (ppwDirty) calcPpw();
+    target = Math.min(maxScroll(), target + cfg.wpm / 60 * ppw * dt);
     if (target >= maxScroll() - 0.5) setStat('סוף הטקסט', false);
   }
   const diff = target - curY;
@@ -645,7 +668,23 @@ function posFromScroll() {
   }
   return words.length;
 }
-function renderModeBtn() { $('#modeBtn').textContent = mode === 'voice' ? 'מצב: קול' : 'מצב: גלילה'; }
+function renderModeBtn() {
+  $('#modeBtn').textContent = mode === 'voice' ? 'מצב: קול' : 'מצב: גלילה';
+  $('#spdMinus').hidden = $('#spdPlus').hidden = mode !== 'auto';
+}
+function renderLinesBtn() { $('#linesBtn').textContent = cfg.lines ? 'שורות: ' + cfg.lines : 'שורות: הכל'; }
+function changeSpeed(d) {
+  cfg.wpm = clamp(cfg.wpm + d, 40, 300);
+  speedIn.value = cfg.wpm;
+  save(); syncOutputs();
+  setStat('מהירות: ' + cfg.wpm + ' מילים לדקה', true);
+}
+function cycleLines() {
+  cfg.lines = (cfg.lines + 1) % 4;
+  linesSel.value = String(cfg.lines);
+  save(); renderLinesBtn();
+  applyLayout();
+}
 function setMode(m) {
   if (m === 'voice' && !SR) { setStat('אין תמיכה בזיהוי דיבור בדפדפן הזה.', false); return; }
   stopRec();
@@ -958,6 +997,7 @@ async function openPrompter() {
   $('#pause').textContent = 'השהה';
   heardEl.textContent = '';
   renderModeBtn();
+  renderLinesBtn();
   applyLayout();
   paintAll();
   stage.scrollTop = 0; curY = 0; target = 0;
@@ -1065,6 +1105,9 @@ $('#back').addEventListener('click', () => {
 });
 $('#pause').addEventListener('click', () => setPaused(!paused));
 $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'auto' : 'voice'));
+$('#spdMinus').addEventListener('click', () => changeSpeed(-10));
+$('#spdPlus').addEventListener('click', () => changeSpeed(10));
+$('#linesBtn').addEventListener('click', cycleLines);
 $('#prevS').addEventListener('click', prevSentence);
 $('#nextS').addEventListener('click', nextSentence);
 $('#fsMinus').addEventListener('click', () => changeFs(-4));

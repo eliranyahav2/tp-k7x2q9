@@ -6,6 +6,9 @@
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0a0e13">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -177,6 +180,7 @@ details summary{color:var(--muted);cursor:pointer}
     <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה" ואז "שמור סרטון". "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
   </section>
   <button class="go" id="go" type="button">התחל</button>
+  <button class="btn2" id="install" type="button" hidden style="min-height:46px;border-radius:12px;font-weight:700">התקן כאפליקציה בטלפון</button>
   <p class="err" id="err" role="alert" hidden></p>
 </main>
 
@@ -551,6 +555,7 @@ function loop(t) {
 
 /* speech recognition */
 let rec = null, fatal = false;
+let srErrors = [];
 function stopRec() {
   if (!rec) return;
   const r = rec;
@@ -572,6 +577,7 @@ function startRec() {
   r.onresult = onResult;
   r.onerror = ev => {
     const e = ev.error;
+    if (e && !srErrors.includes(e) && srErrors.length < 6) srErrors.push(e);
     if (e === 'not-allowed' || e === 'service-not-allowed') {
       fatal = true;
       setStat('אין הרשאה למיקרופון. אשר גישה בדפדפן (נדרשת כתובת https).', false);
@@ -588,11 +594,20 @@ function startRec() {
   r.onend = () => {
     if (rec !== r) return;
     if (running && !paused && mode === 'voice' && !fatal) {
-      setTimeout(() => { if (rec === r && running && !paused && mode === 'voice') { try { r.start(); } catch (e) {} } }, 60);
+      setTimeout(() => { if (rec === r && running && !paused && mode === 'voice') beginSR(r); }, 60);
     } else {
       setStat(fatal ? statEl.textContent : 'לא מקשיב', false);
     }
   };
+  beginSR(r);
+}
+// Phones allow one microphone capture at a time. When a recording is running, hand the recognizer the
+// recorder's own audio track (supported by recent Chrome); browsers without support ignore the argument.
+function beginSR(r) {
+  const tr = camStream && camStream.getAudioTracks && camStream.getAudioTracks()[0];
+  if (tr && tr.readyState === 'live' && navigator.maxTouchPoints > 0) {
+    try { r.start(tr.clone()); return; } catch (e) {}
+  }
   try { r.start(); } catch (e) {}
 }
 function onResult(e) {
@@ -722,7 +737,7 @@ const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function startCamera() {
-  recErrors = []; camWhy = ''; speechEvents = 0; peak = 0; trackMuted = false; chunks = []; mr = null;
+  recErrors = []; srErrors = []; camWhy = ''; speechEvents = 0; peak = 0; trackMuted = false; chunks = []; mr = null;
   // created inside the tap, before any await, so mobile browsers let the audio meter run
   try { acx = new (window.AudioContext || window.webkitAudioContext)(); acx.resume(); } catch (e) { acx = null; }
   try {
@@ -969,14 +984,14 @@ function showResult(blob, secs) {
   else if (usedVoice) {
     if (srOk && audioOk) { msg = 'הקלטה וזיהוי קול עבדו יחד. נגן את הסרטון ובדוק שיש בו קול.'; bad = false; }
     else if (srOk) msg = 'הטקסט עקב אחרי הקול אבל הקול בסרטון יצא שקט. בטלפון הזה ההקלטה והזיהוי הקולי מפריעים זה לזה. עבור למצב גלילה אוטומטית.';
-    else if (audioOk) msg = 'הסרטון קלט קול אבל הטקסט לא התקדם לפי הקול. כנראה שהם מפריעים זה לזה, או שהדיבור לא זוהה. נסה גלילה אוטומטית.';
+    else if (audioOk) msg = 'הסרטון קלט קול אבל זיהוי הדיבור לא החזיר כלום' + (srErrors.length ? ' (שגיאת דפדפן: ' + srErrors.join(', ') + ')' : '') + '. בטלפונים הזיהוי והמצלמה לפעמים מתחרים על המיקרופון. נסה גלילה אוטומטית.';
     else msg = 'לא נקלט קול. בדוק הרשאות מיקרופון ודבר קרוב יותר.';
   } else if (audioOk) { msg = 'ההקלטה מוכנה. נגן את הסרטון ובדוק שיש בו קול.'; bad = false; }
   else msg = 'הסרטון יצא שקט. בדוק את המיקרופון.';
   verdict.textContent = msg;
   verdict.classList.toggle('bad', bad);
   $('#report').value = ['seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
-    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'errors=' + (recErrors.join('|') || 'none'), navigator.userAgent].join('\n');
+    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'errors=' + (recErrors.join('|') || 'none'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
   $('#result').hidden = false;
 }
 
@@ -1079,6 +1094,20 @@ function changeFs(d) {
   save(); syncOutputs();
   applyLayout();
   aim(true);
+}
+
+/* installable app */
+let installEvt = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#install').hidden = false; });
+addEventListener('appinstalled', () => { installEvt = null; $('#install').hidden = true; });
+$('#install').addEventListener('click', async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  try { await installEvt.userChoice; } catch (e) {}
+  installEvt = null; $('#install').hidden = true;
+});
+if ('serviceWorker' in navigator && window.isSecureContext && /^https?:/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 /* wiring */

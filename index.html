@@ -110,12 +110,15 @@ body.mirror #stage{transform:scaleX(-1)}
 #recTag{flex:none;color:var(--warn);font-weight:600;font-variant-numeric:tabular-nums}
 #recTag::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-inline-end:6px;animation:pulse 1.4s ease-in-out infinite}
 #result{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;background:var(--bg);overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(12px + env(safe-area-inset-bottom,0px))}
-#result .inner{max-width:560px;height:100%;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:10px}
-#result h1{font-size:1.3rem;margin:0;flex:none}
+#result .inner{max-width:560px;height:100%;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding-bottom:84px}
+#result h1{font-size:1.3rem;margin:0;flex:1}
+.rhead{display:flex;align-items:center;gap:10px;flex:none}
+.rhead .btn2{min-height:40px;padding:0 14px;border-radius:10px;font-weight:700;cursor:pointer}
 #result .verdict{flex:none;font-size:.95rem}
 #result details{flex:none}
-.actions{display:flex;gap:10px;flex:none}
+.actions{position:fixed;right:0;left:0;bottom:0;z-index:2;display:flex;gap:10px;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--bg);border-top:1px solid var(--line)}
 .actions>*{flex:1;min-height:56px;border-radius:12px;font-weight:800;font-size:1.05rem;display:flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer}
+#result[hidden] .actions{display:none}
 .btn2{background:var(--surface);color:var(--fg);border:1px solid var(--line)}
 #result video{flex:1 1 0;min-height:120px;width:100%;object-fit:contain;background:#000;border-radius:10px}
 .verdict{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:600}
@@ -181,6 +184,8 @@ details summary{color:var(--muted);cursor:pointer}
   </section>
   <button class="go" id="go" type="button">התחל</button>
   <button class="btn2" id="install" type="button" hidden style="min-height:46px;border-radius:12px;font-weight:700">התקן כאפליקציה בטלפון</button>
+  <button class="btn2" id="diag" type="button" style="min-height:46px;border-radius:12px;font-weight:700">בדיקת מכשיר (20 שניות)</button>
+  <pre id="diagOut" hidden style="direction:rtl;text-align:right;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;font:.85rem/1.5 var(--font-ui);margin:0"></pre>
   <p class="err" id="err" role="alert" hidden></p>
 </main>
 
@@ -215,14 +220,15 @@ details summary{color:var(--muted);cursor:pointer}
 
 <div id="result" hidden>
   <div class="inner">
-    <h1>ההקלטה מוכנה</h1>
+    <div class="rhead"><h1>ההקלטה מוכנה</h1><button class="btn2" id="backTop" type="button">חזרה ›</button></div>
     <video id="playback" controls playsinline></video>
     <div class="verdict" id="verdict"></div>
-    <div class="actions">
-      <a class="linkbtn" id="dl" download>שמור סרטון</a>
-      <button class="btn2" id="back" type="button">חזרה</button>
-    </div>
     <details><summary>פרטים טכניים</summary><textarea id="report" readonly aria-label="פרטים טכניים"></textarea></details>
+  </div>
+  <div class="actions">
+    <a class="linkbtn" id="dl" download>שמור סרטון</a>
+    <button class="btn2" id="share" type="button" hidden>שתף</button>
+    <button class="btn2" id="back" type="button">חזרה</button>
   </div>
 </div>
 
@@ -992,7 +998,10 @@ function showResult(blob, secs) {
   verdict.classList.toggle('bad', bad);
   $('#report').value = ['seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
     'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'errors=' + (recErrors.join('|') || 'none'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
+  const sh = $('#share');
+  sh.hidden = !(resultFile && navigator.canShare && navigator.canShare({ files: [resultFile] }));
   $('#result').hidden = false;
+  try { history.pushState({ r: 1 }, ''); } catch (e) {}
 }
 
 /* open / close */
@@ -1096,6 +1105,53 @@ function changeFs(d) {
   aim(true);
 }
 
+/* device check: tells apart a missing permission, a missing speech service and a microphone conflict */
+async function runDiag() {
+  const out = $('#diagOut'), btn = $('#diag');
+  out.hidden = false; out.textContent = '';
+  const log = m => { out.textContent += m + '\n'; };
+  btn.disabled = true;
+  log('https: ' + window.isSecureContext + ' | מותקן כאפליקציה: ' + matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+  log('זיהוי דיבור: ' + !!SR + ' | הקלטה: ' + !!window.MediaRecorder + ' | מיקרופון: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+  log(navigator.userAgent);
+  if (!SR) { log('הדפדפן הזה לא תומך בזיהוי דיבור.'); btn.disabled = false; return; }
+  const results = {};
+  // mode: 'alone' = recognizer only; 'plain' = mic open + plain start; 'track' = mic open + recognizer fed the same track
+  const listen = (key, label, mode, secs) => new Promise(async res => {
+    let stream = null, track = null;
+    if (mode !== 'alone') {
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); track = stream.getAudioTracks()[0]; }
+      catch (e) { log(label + ': המיקרופון נכשל (' + (e && e.name) + ')'); results[key] = -1; res(); return; }
+    }
+    const r = new SR();
+    r.lang = cfg.lang; r.continuous = true; r.interimResults = true;
+    const ev = { audio: 0, sound: 0, speech: 0, result: 0 }, errs = []; let last = '';
+    r.onaudiostart = () => ev.audio++; r.onsoundstart = () => ev.sound++; r.onspeechstart = () => ev.speech++;
+    r.onresult = e => { ev.result++; try { last = e.results[e.results.length - 1][0].transcript; } catch (x) {} };
+    r.onerror = e => errs.push(e.error);
+    log(label + ': דבר עכשיו, למשל "שלום לכולם ברוכים הבאים"…');
+    try { if (mode === 'track') r.start(track.clone()); else r.start(); } catch (e) { errs.push('start:' + (e && e.name)); }
+    setTimeout(() => {
+      try { r.stop(); } catch (e) {}
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      results[key] = ev.result;
+      log('  תוצאה: ' + ev.result + ' אירועי זיהוי | אודיו הגיע: ' + ev.audio + '/' + ev.sound + '/' + ev.speech + ' | שגיאות: ' + (errs.join(', ') || 'אין') + (last ? ' | נשמע: "' + last + '"' : ''));
+      setTimeout(res, 700);
+    }, secs * 1000);
+  });
+  await listen('alone', '1/3 זיהוי דיבור לבד', 'alone', 6);
+  await listen('plain', '2/3 זיהוי כשהמיקרופון פתוח', 'plain', 6);
+  await listen('track', '3/3 זיהוי עם אותו ערוץ של ההקלטה', 'track', 6);
+  let verdict;
+  if (results.alone > 0 && results.plain > 0) verdict = 'זיהוי הדיבור עובד גם כשהמיקרופון פתוח. אפשר להקליט ולעקוב אחרי הקול.';
+  else if (results.alone > 0 && results.track > 0) verdict = 'זיהוי עובד רק עם הערוץ המשותף של ההקלטה. הכלי משתמש בזה אוטומטית בטלפון.';
+  else if (results.alone > 0) verdict = 'הזיהוי עובד לבד אבל נעצר כשהמיקרופון פתוח להקלטה. בטלפון הזה השתמש בגלילה אוטומטית בזמן הקלטה.';
+  else verdict = 'הזיהוי לא החזיר דבר גם לבד. הבעיה בשירות הדיבור של הטלפון או בהרשאות, ולא בהקלטה. בדוק הקלדה קולית של Google בעברית.';
+  log('\nסיכום: ' + verdict);
+  btn.disabled = false;
+}
+$('#diag').addEventListener('click', runDiag);
+
 /* installable app */
 let installEvt = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#install').hidden = false; });
@@ -1125,12 +1181,23 @@ $('#dl').addEventListener('click', async e => {
   e.preventDefault();
   try { await navigator.share({ files: [resultFile] }); } catch (err) {}
 });
-$('#back').addEventListener('click', () => {
+function hideResult() {
+  if ($('#result').hidden) return;
   $('#result').hidden = true;
   const v = $('#playback');
   v.removeAttribute('src');
   v.load();
   if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = ''; }
+}
+function backFromResult() {
+  if (history.state && history.state.r) history.back(); else hideResult();
+}
+$('#back').addEventListener('click', backFromResult);
+$('#backTop').addEventListener('click', backFromResult);
+addEventListener('popstate', hideResult);
+$('#share').addEventListener('click', async () => {
+  if (!resultFile) return;
+  try { await navigator.share({ files: [resultFile] }); } catch (err) {}
 });
 $('#pause').addEventListener('click', () => setPaused(!paused));
 $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'auto' : 'voice'));

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#0a0e13">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -89,6 +89,7 @@ body.mirror #stage{transform:scaleX(-1)}
 .tick.l{left:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 0 9px 13px;border-color:transparent transparent transparent var(--accent)}
 
 #bar{position:fixed;right:0;left:0;bottom:0;padding:26px 12px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,rgba(10,14,19,.98) 68%,rgba(10,14,19,0))}
+.recfail{background:rgba(255,155,138,.14);border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:.9rem;font-weight:600}
 .meter{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:10px}
 #progress{display:block;height:100%;width:0;background:var(--accent)}
 .status{display:flex;align-items:center;gap:8px;min-height:22px;margin-bottom:8px;color:var(--muted);font-size:.85rem}
@@ -196,6 +197,7 @@ details summary{color:var(--muted);cursor:pointer}
   <canvas id="out" hidden></canvas>
   <div id="bar">
     <div class="meter"><i id="progress"></i></div>
+    <div class="recfail" id="recFail" role="alert" hidden></div>
     <div class="status"><span id="dot"></span><span id="recTag" hidden></span><span id="stat"></span><span id="heard"></span></div>
     <div class="btns">
       <button class="btn primary" id="exit" type="button">סיום</button>
@@ -761,7 +763,7 @@ async function startCamera() {
     camStream = null;
     recErrors.push('getUserMedia:' + (e && e.name));
     const nm = e && e.name;
-    camWhy = nm === 'NotAllowedError' ? 'ההרשאה למצלמה או למיקרופון נדחתה. אשר בהגדרות האתר בדפדפן.'
+    camWhy = nm === 'NotAllowedError' ? 'ההרשאה למצלמה או למיקרופון נדחתה. באנדרואיד: לחיצה ארוכה על אייקון האפליקציה, פרטי אפליקציה, הרשאות, ולאפשר מצלמה ומיקרופון.'
       : nm === 'NotFoundError' ? 'לא נמצאה מצלמה או מיקרופון.'
       : nm === 'NotReadableError' ? 'המצלמה תפוסה על ידי אפליקציה אחרת. סגור אותה ונסה שוב.'
       : nm === 'SecurityError' ? 'הדף חייב להיפתח מכתובת https.' : '';
@@ -913,6 +915,7 @@ function beginRecording() {
     return false;
   }
   recording = true;
+  showRecFail(false);
   $('#exit').textContent = 'סיום ושמירה';
   recStart = Date.now();
   const tag = $('#recTag');
@@ -924,6 +927,11 @@ function beginRecording() {
   }, 500);
   syncRecBtn();
   return true;
+}
+function showRecFail(on) {
+  const el = $('#recFail');
+  el.hidden = !on;
+  if (on) el.textContent = 'ההקלטה לא התחילה. ' + (camWhy || recErrors.join(', ') || 'סיבה לא ידועה') + ' אחרי שתתקן, לחץ "● הקלט" בסרגל.';
 }
 function syncRecBtn() { $('#recBtn').hidden = !canRecord || recording || recBusy; }
 async function recordNow() {
@@ -939,7 +947,7 @@ async function recordNow() {
     for (let n = 3; n > 0 && running; n--) { setStat('מקליטים בעוד ' + n + '…' + orientHint(), false); await sleep(1000); }
     if (running && !beginRecording()) failed = true;
   }
-  if (failed) { setStat('אי אפשר להקליט. ' + (camWhy || recErrors.join(', ')), false); await sleep(4000); }
+  if (failed) { setStat('אי אפשר להקליט.', false); showRecFail(true); await sleep(1500); }
   recBusy = false; syncRecBtn();
   if (running && wasVoice && !paused) startRec();
 }
@@ -1020,6 +1028,7 @@ async function openPrompter() {
   prompter.hidden = false;
   $('#pause').textContent = 'השהה';
   heardEl.textContent = '';
+  showRecFail(false);
   renderModeBtn();
   renderLinesBtn();
   applyLayout();
@@ -1042,13 +1051,15 @@ async function openPrompter() {
     const ok = await startCamera();
     if (!running) { if (ok) stopCamera(); recBusy = false; return; }
     if (!ok) {
-      setStat('אי אפשר להקליט. ' + (camWhy || recErrors.join(', ')) + ' ממשיך בלי הקלטה.', false);
-      await sleep(4500);
+      setStat('אי אפשר להקליט. ממשיך בלי הקלטה.', false);
+      showRecFail(true);
+      await sleep(1500);
     } else {
       for (let n = 3; n > 0 && running; n--) { setStat('מתחילים בעוד ' + n + '…' + orientHint(), false); await sleep(1000); }
       if (running && !beginRecording()) {
-        setStat('אי אפשר להקליט (' + recErrors.join(', ') + '). ממשיך בלי הקלטה.', false);
-        await sleep(2000);
+        setStat('אי אפשר להקליט. ממשיך בלי הקלטה.', false);
+        showRecFail(true);
+        await sleep(1500);
       }
     }
     recBusy = false;

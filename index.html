@@ -147,7 +147,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי</h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v13</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -367,13 +367,22 @@ linesSel.value = String(cfg.lines);
 linesSel.addEventListener('change', () => { cfg.lines = +linesSel.value; save(); });
 mirrorIn.addEventListener('change', () => { cfg.mirror = mirrorIn.checked; save(); });
 const recordIn = $('#record');
+if (!cfg.rv13) { cfg.rv13 = 1; cfg.record = true; save(); }
 recordIn.checked = !!cfg.record && canRecord;
+function noRecReason() {
+  const miss = [];
+  if (!window.isSecureContext) miss.push('הדף לא נפתח מכתובת https (נפתח מקובץ או מתוך וואטסאפ/אפליקציה)');
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) miss.push('אין גישה למצלמה');
+  if (!window.MediaRecorder) miss.push('הדפדפן לא תומך בהקלטה (MediaRecorder)');
+  return miss.join(' | ') || 'לא ידוע';
+}
 if (!canRecord) {
   recordIn.disabled = true;
   $('#recHint').textContent = !window.isSecureContext
     ? 'אין גישה למצלמה כי הדף נפתח כקובץ מקומי ולא מכתובת https. בטלפון זה תמיד המצב כשפותחים קובץ שהורדת. העלה את הקובץ לאתר שלך ופתח אותו משם. הטלפרומפטר עצמו ממשיך לעבוד.'
     : 'הדפדפן הזה לא תומך בהקלטת וידאו מתוך דף (באייפון נדרש iOS 14.3 ומעלה). הטלפרומפטר עצמו ממשיך לעבוד.';
   $('#recHint').style.color = 'var(--warn)';
+  $('#recHint').textContent = 'אין הקלטה במכשיר הזה. סיבה: ' + noRecReason() + '. פתח את https://eliranyahav2.github.io/tp-k7x2q9/ ישירות בכרום.';
 }
 recordIn.addEventListener('change', () => { cfg.record = recordIn.checked; save(); });
 const burnIn = $('#burn');
@@ -933,9 +942,10 @@ function showRecFail(on) {
   el.hidden = !on;
   if (on) el.textContent = 'ההקלטה לא התחילה. ' + (camWhy || recErrors.join(', ') || 'סיבה לא ידועה') + ' אחרי שתתקן, לחץ "● הקלט" בסרגל.';
 }
-function syncRecBtn() { $('#recBtn').hidden = !canRecord || recording || recBusy; }
+function syncRecBtn() { $('#recBtn').hidden = recording || recBusy; }
 async function recordNow() {
-  if (!running || recording || recBusy || !canRecord) return;
+  if (!running || recording || recBusy) return;
+  if (!canRecord) { camWhy = noRecReason(); showRecFail(true); return; }
   recBusy = true; syncRecBtn();
   const wasVoice = mode === 'voice' && !paused;
   if (wasVoice) stopRec();

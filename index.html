@@ -147,7 +147,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v13</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v14</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -176,7 +176,8 @@ details summary{color:var(--muted);cursor:pointer}
       <label class="check"><input type="checkbox" id="full"> מסך מלא</label>
       <label class="check"><input type="checkbox" id="mirror"> הפוך אופקית</label>
       <label class="check"><input type="checkbox" id="fade"> טשטוש שורות רחוקות</label>
-      <label class="check"><input type="checkbox" id="record"> הקלט וידאו</label>
+      <label class="check"><input type="checkbox" id="record"> הקלט</label>
+      <label class="check"><input type="checkbox" id="audioOnly"> קול בלבד (בלי וידאו)</label>
       <label class="check"><input type="checkbox" id="burn"> כתוביות בתוך הסרטון</label>
     </div>
     <p class="note" id="support" hidden></p>
@@ -385,6 +386,10 @@ if (!canRecord) {
   $('#recHint').textContent = 'אין הקלטה במכשיר הזה. סיבה: ' + noRecReason() + '. פתח את https://eliranyahav2.github.io/tp-k7x2q9/ ישירות בכרום.';
 }
 recordIn.addEventListener('change', () => { cfg.record = recordIn.checked; save(); });
+const audioIn = $('#audioOnly');
+audioIn.checked = !!cfg.audioOnly && canRecord;
+audioIn.disabled = !canRecord;
+audioIn.addEventListener('change', () => { cfg.audioOnly = audioIn.checked; if (audioIn.checked) { recordIn.checked = true; cfg.record = true; } save(); });
 const burnIn = $('#burn');
 burnIn.checked = !!cfg.burn && canRecord;
 burnIn.disabled = !canRecord;
@@ -748,7 +753,7 @@ let started = false, usedVoice = false;
 let camStream = null, mr = null, chunks = [], mime = '', recording = false, recStart = 0, recTimer = 0;
 let speechEvents = 0, peak = 0, acx = null, analyser = null, abuf = null, trackMuted = false, recErrors = [];
 let resultUrl = '', resultFile = null;
-let camWhy = '';
+let camWhy = '', audioOnlyRun = false;
 let burn = false, useCv = false, burnUsed = false, outCtx = null, capChunks = [], capOf = [], capIdx = 0, capIdxT = 0, recBusy = false;
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -759,7 +764,10 @@ async function startCamera() {
   try { acx = new (window.AudioContext || window.webkitAudioContext)(); acx.resume(); } catch (e) { acx = null; }
   try {
     const hq = cfg.qual === 1080;
-    try {
+    audioOnlyRun = !!cfg.audioOnly;
+    if (audioOnlyRun) {
+      camStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } else try {
       camStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'user' }, width: { ideal: hq ? 1920 : 1280 }, height: { ideal: hq ? 1080 : 720 }, frameRate: { ideal: 30 } },
         audio: true
@@ -780,9 +788,11 @@ async function startCamera() {
     return false;
   }
   const cam = $('#cam');
-  cam.srcObject = camStream;
-  cam.hidden = false;
-  try { const pl = cam.play(); if (pl && pl.catch) pl.catch(() => {}); } catch (e) {}
+  if (!audioOnlyRun) {
+    cam.srcObject = camStream;
+    cam.hidden = false;
+    try { const pl = cam.play(); if (pl && pl.catch) pl.catch(() => {}); } catch (e) {}
+  }
   if (acx) {
     try {
       analyser = acx.createAnalyser();
@@ -794,7 +804,8 @@ async function startCamera() {
   const at = camStream.getAudioTracks()[0];
   if (at) at.onmute = () => { trackMuted = true; };
   burn = !!cfg.burn;
-  useCv = burn || cfg.orient !== 'auto';
+  if (audioOnlyRun) burn = false;
+  useCv = !audioOnlyRun && (burn || cfg.orient !== 'auto');
   if (useCv) {
     await new Promise(res => {
       if (cam.videoWidth) { res(); return; }
@@ -910,11 +921,11 @@ function beginRecording() {
     }
   }
   burnUsed = burn;
-  const types = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+  const types = audioOnlyRun ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'] : ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
   mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
   chunks = [];
   try {
-    const mo = { videoBitsPerSecond: cfg.qual === 1080 ? 8000000 : 5000000 };
+    const mo = audioOnlyRun ? { audioBitsPerSecond: 128000 } : { videoBitsPerSecond: cfg.qual === 1080 ? 8000000 : 5000000 };
     if (mime) mo.mimeType = mime;
     mr = new MediaRecorder(src, mo);
     mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
@@ -979,7 +990,7 @@ function stopCamera() {
 function finishRecording() {
   return new Promise(res => {
     const done = () => {
-      const blob = new Blob(chunks, { type: mime || 'video/webm' });
+      const blob = new Blob(chunks, { type: mime || (audioOnlyRun ? 'audio/webm' : 'video/webm') });
       stopCamera();
       res(blob);
     };
@@ -996,11 +1007,13 @@ function showResult(blob, secs) {
     resultUrl = URL.createObjectURL(blob);
     v.src = resultUrl;
     dl.href = resultUrl;
-    const name = 'video-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + (/mp4/.test(blob.type) ? '.mp4' : '.webm');
+    const name = (audioOnlyRun ? 'audio-' : 'video-') + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + (/mp4/.test(blob.type) ? (audioOnlyRun ? '.m4a' : '.mp4') : '.webm');
     dl.download = name;
     resultFile = typeof File === 'function' ? new File([blob], name, { type: blob.type }) : null;
   }
   v.hidden = !blob.size;
+  v.style.height = audioOnlyRun ? '64px' : '';
+  dl.textContent = audioOnlyRun ? 'שמור הקלטה' : 'שמור סרטון';
   dl.hidden = !blob.size;
   const srOk = speechEvents > 0, audioOk = peak > 0.03 && !trackMuted;
   let msg, bad = true;
@@ -1010,7 +1023,7 @@ function showResult(blob, secs) {
     else if (srOk) msg = 'הטקסט עקב אחרי הקול אבל הקול בסרטון יצא שקט. בטלפון הזה ההקלטה והזיהוי הקולי מפריעים זה לזה. עבור למצב גלילה אוטומטית.';
     else if (audioOk) msg = 'הסרטון קלט קול אבל זיהוי הדיבור לא החזיר כלום' + (srErrors.length ? ' (שגיאת דפדפן: ' + srErrors.join(', ') + ')' : '') + '. בטלפונים הזיהוי והמצלמה לפעמים מתחרים על המיקרופון. נסה גלילה אוטומטית.';
     else msg = 'לא נקלט קול. בדוק הרשאות מיקרופון ודבר קרוב יותר.';
-  } else if (audioOk) { msg = 'ההקלטה מוכנה. נגן את הסרטון ובדוק שיש בו קול.'; bad = false; }
+  } else if (audioOk) { msg = 'ההקלטה מוכנה. נגן ובדוק שיש בה קול.'; bad = false; }
   else msg = 'הסרטון יצא שקט. בדוק את המיקרופון.';
   verdict.textContent = msg;
   verdict.classList.toggle('bad', bad);

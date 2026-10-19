@@ -113,6 +113,7 @@ body.mirror #stage{transform:scaleX(-1)}
 .btns{display:flex;flex-wrap:wrap;gap:6px}
 .btns.main .btn{flex:1 1 0;min-height:42px;font-size:.9rem;padding:0 4px}
 .btns.more{margin-top:6px}
+.spdval{display:flex;align-items:center;justify-content:center;border-color:var(--accent);color:var(--accent);cursor:default;font-variant-numeric:tabular-nums}
 .btns.more .btn{flex:1 1 22%;min-height:36px;font-size:.82rem}
 #bar .meter{margin-bottom:6px}
 #bar .status{margin-bottom:6px;min-height:18px}
@@ -164,7 +165,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v24</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v25</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -241,10 +242,11 @@ details summary{color:var(--muted);cursor:pointer}
       <button class="btn" id="moreBtn" type="button" aria-expanded="false">עוד ▴</button>
     </div>
     <div class="btns more" id="more" hidden>
-      <button class="btn" id="viewBtn" type="button">תצוגה: גלילה</button>
+      <button class="btn" id="spdMinus" type="button" aria-label="איטי יותר">לאט −10</button>
+      <span class="btn spdval" id="spdVal" role="status">120 מילים לדקה</span>
+      <button class="btn" id="spdPlus" type="button" aria-label="מהיר יותר">מהר +10</button>
       <button class="btn" id="modeBtn" type="button">מצב: קול</button>
-      <button class="btn" id="spdMinus" type="button" aria-label="איטי יותר">לאט −</button>
-      <button class="btn" id="spdPlus" type="button" aria-label="מהיר יותר">מהר +</button>
+      <button class="btn" id="viewBtn" type="button">תצוגה: גלילה</button>
       <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
       <button class="btn" id="fullBtn" type="button">מסך מלא</button>
       <button class="btn" id="prevS" type="button">משפט קודם</button>
@@ -280,7 +282,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v24';
+const APP_VER = 'v25';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -766,11 +768,11 @@ function loop(t) {
     if (cfg.adapt !== false) sylStep(t, talking); else paceMul = 1;
     if (talking !== wasTalking && !paused && started) {
       if (wasTalking && !talking) flipIfChunkEnd();   // stopped at the end of what is shown: show the next part
-      wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); mulShownT = 0;
+      wasTalking = talking; setStat(talking ? 'מדבר… ' + cfg.wpm + ' מילים לדקה' : 'ממתין לקול…', talking); mulShownT = 0;
     }
     if (talking && !paused && started && cfg.adapt !== false && t - mulShownT > 600) {
       mulShownT = t;
-      setStat('מדבר… קצב ' + (paceMul > 1.08 ? 'מהיר' : paceMul < 0.92 ? 'איטי' : 'רגיל') + ' ×' + paceMul.toFixed(1), true);
+      setStat('מדבר… ' + Math.round(cfg.wpm * paceMul) + ' מילים לדקה (רגיל ' + cfg.wpm + ' ×' + paceMul.toFixed(1) + ')', true);
     }
   }
   if ((mode === 'auto' || mode === 'pace') && !paused && started && pos < words.length && (mode === 'auto' || t < voiceUntil)) {
@@ -1007,13 +1009,15 @@ function posFromScroll() {
 }
 function renderModeBtn() {
   $('#modeBtn').textContent = mode === 'voice' ? 'מצב: קול' : mode === 'pace' ? 'מצב: קצב קול' : 'מצב: גלילה';
-  $('#spdMinus').hidden = $('#spdPlus').hidden = mode === 'voice';
+  $('#spdMinus').hidden = $('#spdPlus').hidden = $('#spdVal').hidden = mode === 'voice';
+  $('#spdVal').textContent = cfg.wpm + ' מילים לדקה';
 }
 function renderLinesBtn() { $('#linesBtn').textContent = cfg.lines ? 'שורות: ' + cfg.lines : 'שורות: הכל'; }
 function changeSpeed(d) {
   cfg.wpm = clamp(cfg.wpm + d, 40, 300);
   speedIn.value = cfg.wpm;
   save(); syncOutputs();
+  $('#spdVal').textContent = cfg.wpm + ' מילים לדקה';
   setStat('מהירות: ' + cfg.wpm + ' מילים לדקה', true);
 }
 function cycleLines() {
@@ -1048,7 +1052,7 @@ function setPaused(v) {
   $('#pause').textContent = v ? 'המשך' : 'השהה';
   if (v) { stopRec(); setStat('מושהה', false); }
   else if (mode === 'voice') { lastSync = Date.now(); startRec(); }
-  else setStat(mode === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית', true);
+  else setStat(mode === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית · ' + cfg.wpm + ' מילים לדקה', true);
 }
 
 /* recording */
@@ -1319,7 +1323,7 @@ async function restartTake() {
   }
   paused = false; $('#pause').textContent = 'השהה';
   if (mode === 'voice') { resetSrWatch(); startRec(); }
-  else setStat(mode === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית', true);
+  else setStat(mode === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית · ' + cfg.wpm + ' מילים לדקה', true);
 }
 function stopCamera() {
   clearInterval(recTimer);
@@ -1451,7 +1455,7 @@ async function openPrompter() {
   lastSync = Date.now();
   if (mode === 'voice') { resetSrWatch(); startRec(); }
   else if (mode === 'pace') { setStat('התחל לדבר…', true); ensurePaceMeter(); }
-  else setStat('גלילה אוטומטית', true);
+  else setStat('גלילה אוטומטית · ' + cfg.wpm + ' מילים לדקה', true);
 }
 function closePrompter() {
   $('#countdown').hidden = true;

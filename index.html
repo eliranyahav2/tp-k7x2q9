@@ -113,6 +113,8 @@ body.mirror #stage{transform:scaleX(-1)}
 .btns{display:flex;flex-wrap:wrap;gap:6px}
 .btns.main .btn{flex:1 1 0;min-height:42px;font-size:.9rem;padding:0 4px}
 .btns.more{margin-top:6px}
+.btns .landonly{display:none}
+@media (orientation:landscape){.btns .landonly{display:block}}
 .spdval{display:flex;align-items:center;justify-content:center;border-color:var(--accent);color:var(--accent);cursor:default;font-variant-numeric:tabular-nums}
 .btns.more .btn{flex:1 1 22%;min-height:36px;font-size:.82rem}
 #bar .meter{margin-bottom:6px}
@@ -127,6 +129,15 @@ body.mirror #stage{transform:scaleX(-1)}
 
 #cam{position:fixed;left:12px;bottom:var(--barh,190px);width:min(26vw,200px);aspect-ratio:3/4;height:auto;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#000;z-index:3;pointer-events:none}
 @media (orientation:landscape){#cam{aspect-ratio:16/9;width:min(22vw,200px)}}
+.land-left #script{margin:0 auto 0 calc(env(safe-area-inset-left,0px) + 22px)}
+.land-left #sentBox{left:calc(env(safe-area-inset-left,0px) + 22px);right:auto;margin:0}
+.land-left .tick.l{left:calc(env(safe-area-inset-left,0px) + 4px)}
+.land-left .tick.r{right:auto;left:calc(env(safe-area-inset-left,0px) + 26px + var(--colwid))}
+.land-left #cam,.land-left #out{left:auto;right:12px}
+.land-right #script{margin:0 calc(env(safe-area-inset-right,0px) + 22px) 0 auto}
+.land-right #sentBox{right:calc(env(safe-area-inset-right,0px) + 22px);left:auto;margin:0}
+.land-right .tick.r{right:calc(env(safe-area-inset-right,0px) + 4px)}
+.land-right .tick.l{left:auto;right:calc(env(safe-area-inset-right,0px) + 26px + var(--colwid))}
 #recTag{flex:none;color:var(--warn);font-weight:600;font-variant-numeric:tabular-nums}
 #recTag::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-inline-end:6px;animation:pulse 1.4s ease-in-out infinite}
 #result{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;background:var(--bg);overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(12px + env(safe-area-inset-bottom,0px))}
@@ -165,7 +176,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v25</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v26</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -239,6 +250,8 @@ details summary{color:var(--muted);cursor:pointer}
       <button class="btn" id="pause" type="button">השהה</button>
       <button class="btn" id="restart" type="button">התחל מחדש</button>
       <button class="btn rec" id="recBtn" type="button">● הקלט</button>
+      <button class="btn landonly" id="lineBack" type="button">שורה ↑</button>
+      <button class="btn landonly" id="lineFwd" type="button">שורה ↓</button>
       <button class="btn" id="moreBtn" type="button" aria-expanded="false">עוד ▴</button>
     </div>
     <div class="btns more" id="more" hidden>
@@ -282,7 +295,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v25';
+const APP_VER = 'v26';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -593,14 +606,28 @@ function wordTime(i) {
   return x;
 }
 
+// In landscape the front camera sits on a short edge: left when the phone's top points left
+// (landscape-primary on Android), right otherwise.
+function camSide() {
+  if (innerWidth <= innerHeight || !navigator.maxTouchPoints) return '';
+  const t = (screen.orientation && screen.orientation.type) || '';
+  if (t === 'landscape-secondary') return 'right';
+  if (t === 'landscape-primary') return 'left';
+  return typeof window.orientation === 'number' && window.orientation === -90 ? 'right' : 'left';
+}
+function isLand() { return innerWidth > innerHeight; }
+function anchorPct() { return isLand() ? (cfg.anchorL == null ? 22 : cfg.anchorL) : cfg.anchor; }
 function applyLayout() {
-  const anchor = Math.round(innerHeight * cfg.anchor / 100);
+  const side = camSide();
+  prompter.classList.toggle('land-left', side === 'left');
+  prompter.classList.toggle('land-right', side === 'right');
+  const anchor = Math.round(innerHeight * anchorPct() / 100);
   tickY = anchor + cfg.fs * (hasNq ? 1.85 : 1.55) / 2;
   prompter.style.setProperty('--fs', cfg.fs + 'px');
   const barEl = $('#bar'); if (barEl) prompter.style.setProperty('--barh', (barEl.offsetHeight + 8) + 'px');
   prompter.style.setProperty('--anchor', anchor + 'px');
   prompter.style.setProperty('--tick', tickY + 'px');
-  prompter.style.setProperty('--colwid', 'min(calc(100vw - 24px), max(260px, ' + colw() + 'vw))');
+  prompter.style.setProperty('--colwid', side ? 'min(calc(74vw - 40px), max(260px, ' + colw() + 'vw))' : 'min(calc(100vw - 24px), max(260px, ' + colw() + 'vw))');
   const lh = cfg.fs * (hasNq ? 1.85 : 1.55);
   const B = 'var(--bg)', T = 'rgba(10,14,19,0)';
   let veil = cfg.fade ? 'linear-gradient(to bottom,' + T + ' 0,' + T + ' ' + Math.round(tickY + lh * 2.2) + 'px,' + B + ' ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none';
@@ -656,6 +683,19 @@ function flipIfChunkEnd() {
   if (mode !== 'pace' || pos >= words.length) return;
   const end = chunkEnd(pos);
   if (end > pos && end - pos <= 2) { clockFrac = 0; setPos(end); if (pos >= words.length) setStat('סוף הטקסט', false); }
+}
+// jump a line (or a sentence part in sentence view) back or forward
+function lineStep(d) {
+  if (!running || !words.length) return;
+  const v = clamp(view(), 0, words.length - 1);
+  if (isSent()) {
+    const k = clamp(segOf[v] + d, 0, segs.length - 1);
+    jumpTo(segs[k][0]); return;
+  }
+  if (linesDirty) calcLines();
+  const li = clamp(lineOf[v] + d, 0, lineTops.length - 1);
+  const i = lineOf.indexOf(li);
+  if (i >= 0) { pageStart = -1; jumpTo(i); }
 }
 function calcLines() {
   linesDirty = false;
@@ -760,7 +800,7 @@ function loop(t) {
   if (analyser) {
     if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.0007;
     const thr = cfg.sens === 'high' ? 0.022 : cfg.sens === 'low' ? 0.08 : 0.04;
-    if (lvl > noiseFloor + Math.max(thr, noiseFloor)) voiceUntil = t + (cfg.hold || 350);
+    if (lvl > noiseFloor + Math.max(thr, noiseFloor) && isVoiced()) voiceUntil = t + (cfg.hold || 350);
     if (mode === 'voice' && running && !paused && t < voiceUntil) talkMs += dt * 1000;
   }
   if (mode === 'pace' && analyser) {
@@ -792,6 +832,16 @@ function loop(t) {
 /* speaking rate from syllables: each syllable is a bump in the speech-band loudness.
    The rate is compared with the speaker's own running average, so the speed setting stays
    "my normal pace" and the text speeds up or slows down around it. */
+// Voiced speech has its energy low (vowels, 150-900 Hz); a breath or a hiss is mostly high (2.5-6 kHz).
+let vbuf = null;
+function isVoiced() {
+  if (!analyser) return true;
+  if (!vbuf || vbuf.length !== analyser.frequencyBinCount) vbuf = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(vbuf);
+  const hz = (analyser.context.sampleRate || 48000) / analyser.fftSize;
+  const band = (lo, hi) => { const a = Math.max(1, Math.round(lo / hz)), b = Math.min(vbuf.length - 1, Math.round(hi / hz)); let s = 0; for (let i = a; i <= b; i++) s += vbuf[i]; return s / (b - a + 1); };
+  return band(150, 900) - band(2500, 6000) > 12;
+}
 let fbuf = null, sylE = 0, sylMax = 0, sylMin = 0, sylValley = 0, sylUp = true, sylPeakT = 0, sylLastT = 0, sylN = 0;
 let rateFast = 0, rateSlow = 0, paceMul = 1, mulShownT = 0;
 function resetSyl() { sylE = sylMax = sylMin = sylValley = 0; sylUp = true; sylPeakT = sylLastT = 0; sylN = 0; rateFast = rateSlow = 0; paceMul = 1; }
@@ -808,7 +858,7 @@ function sylStep(t, talking) {
   if (sylUp) {
     if (sylE > sylMax) { sylMax = sylE; sylPeakT = t; }
     if (sylE < sylMax - PROM) {
-      if (talking && sylMax - sylValley >= PROM && sylPeakT - sylLastT > 90) onSyllable(sylPeakT);
+      if (talking && sylMax - sylValley >= PROM && sylPeakT - sylLastT > 110 && isVoiced()) onSyllable(sylPeakT);
       sylUp = false; sylMin = sylE;
     }
   } else {
@@ -823,10 +873,11 @@ function onSyllable(t) {
   const r = 1000 / gap;
   sylN++;
   if (sylN === 1) { rateFast = rateSlow = r; return; }
-  rateFast += (r - rateFast) * 0.18;
-  rateSlow += (r - rateSlow) * (sylN < 25 ? 0.08 : 0.012);
-  const m = sylN < 8 ? 1 : clamp(rateFast / rateSlow, 0.6, 1.6);
-  paceMul += (m - paceMul) * 0.5;
+  rateFast += (r - rateFast) * 0.1;
+  rateSlow += (r - rateSlow) * (sylN < 30 ? 0.06 : 0.01);
+  const m = sylN < 15 ? 1 : clamp(rateFast / rateSlow, 0.75, 1.35);
+  paceMul += (m - paceMul) * 0.25;
+  if (Math.abs(paceMul - 1) < 0.06) paceMul = 1;   // small wobbles: keep the steady speed
 }
 
 /* pace mode: scroll only while the mic hears speech (works together with recording) */
@@ -1492,6 +1543,7 @@ function changeCol(d) {
   aim(true);
 }
 function changeAnchor(d) {
+  if (isLand()) { cfg.anchorL = clamp(anchorPct() + d, 0, 60); save(); applyLayout(); aim(true); setStat('גובה השורה: ' + cfg.anchorL + '% מהמסך', true); return; }
   cfg.anchor = clamp(cfg.anchor + d, 0, 50);
   anchorIn.value = cfg.anchor;
   save(); syncOutputs();
@@ -1603,6 +1655,7 @@ prompter.addEventListener('pointerdown', e => {
   if (running && wantFull && !fsEl() && !e.target.closest('button')) enterFull();
 });
 addEventListener('orientationchange', () => { if (running) setTimeout(() => { applyLayout(); aim(true); }, 250); });
+try { screen.orientation.addEventListener('change', () => { if (running) setTimeout(() => { applyLayout(); aim(true); }, 250); }); } catch (e) {}
 $('#dl').addEventListener('click', async e => {
   if (!IOS || !resultFile || !navigator.canShare || !navigator.canShare({ files: [resultFile] })) return;
   e.preventDefault();
@@ -1639,6 +1692,8 @@ $('#moreBtn').addEventListener('click', () => {
   applyLayout(); aim(false);
 });
 $('#restart').addEventListener('click', restartTake);
+$('#lineBack').addEventListener('click', () => lineStep(-1));
+$('#lineFwd').addEventListener('click', () => lineStep(1));
 
 $('#prevS').addEventListener('click', prevSentence);
 $('#nextS').addEventListener('click', nextSentence);

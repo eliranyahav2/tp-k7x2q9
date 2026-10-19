@@ -176,7 +176,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v27</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v28</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -195,6 +195,8 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="lead"><option value="0">מדויקת</option><option value="1">מהירה</option><option value="2">מהירה מאוד</option></select></div>
       <div class="ctl" id="rowSens"><div class="row"><label for="sens">רגישות לקול</label></div>
         <select id="sens"><option value="high">גבוהה (חדר שקט)</option><option value="mid">רגילה</option><option value="low">נמוכה (רעש ברקע)</option></select></div>
+      <div class="ctl" id="rowPunct"><div class="row"><label for="punct">עצירה בפסיק ובנקודה</label></div>
+        <select id="punct"><option value="short">קצרה</option><option value="normal">רגילה</option><option value="long">ארוכה</option></select></div>
       <div class="ctl" id="rowHold"><div class="row"><label for="hold">עצירה אחרי שתיקה של</label></div>
         <select id="hold"><option value="200">0.2 שניות (מהיר)</option><option value="350">0.35 שניות</option><option value="600">0.6 שניות (רגוע)</option></select></div>
       <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
@@ -294,7 +296,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v27';
+const APP_VER = 'v28';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -405,7 +407,7 @@ function applyModeUI() {
     : 'הטקסט זז במהירות קבועה. הקשה על הטקסט עוצרת וממשיכה.';
   $('#rowLang').hidden = cfg.mode !== 'voice';
   $('#rowLead').hidden = cfg.mode !== 'voice';
-  $('#rowSpeed').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
+  $('#rowSpeed').hidden = $('#rowPunct').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
   $('#rowSens').hidden = $('#rowHold').hidden = cfg.mode !== 'pace';
 }
 text.value = cfg.text;
@@ -420,6 +422,9 @@ anchorIn.addEventListener('input', () => { cfg.anchor = +anchorIn.value; save();
 colwIn.addEventListener('input', () => { cfg.colw = +colwIn.value; save(); syncOutputs(); });
 fadeIn.addEventListener('change', () => { cfg.fade = fadeIn.checked; save(); });
 speedIn.addEventListener('input', () => { cfg.wpm = +speedIn.value; save(); syncOutputs(); });
+const punctSel = $('#punct');
+punctSel.value = cfg.punct || 'normal';
+punctSel.addEventListener('change', () => { cfg.punct = punctSel.value; save(); });
 const sensSel = $('#sens'), holdSel = $('#hold');
 sensSel.value = cfg.sens || 'mid'; holdSel.value = String(cfg.hold || 350);
 sensSel.addEventListener('change', () => { cfg.sens = sensSel.value; save(); });
@@ -596,11 +601,19 @@ function applyView() {
   $('#viewBtn').textContent = sent ? 'תצוגה: משפט' : 'תצוגה: גלילה';
 }
 // time a word takes in auto/pace modes: longer words and sentence ends take longer
+function punctPause(i) {
+  const w = words[i], k = { short: 0.6, long: 1.6 }[cfg.punct] || 1;
+  const paraEnd = i + 1 < words.length && words[i + 1].para;
+  let x = 0;
+  if (paraEnd) x = 2.2;
+  else if (w.end) x = 1.6;                          // . ! ? …
+  else if (/[:;–—]["'”׳״)]*$/.test(w.raw) || /^[–—-]$/.test(w.raw)) x = 1.0;
+  else if (/,["'”׳״)]*$/.test(w.raw)) x = 0.8;
+  return x * k;
+}
 function wordTime(i) {
   const w = words[i];
-  let x = 0.55 + 0.45 * Math.min(2.2, w.n.length / avgLen);
-  if (w.end) x += 0.7; else if (/[,;:]$/.test(w.raw)) x += 0.35;
-  return x;
+  return 0.55 + 0.45 * Math.min(2.2, w.n.length / avgLen) + punctPause(i);
 }
 
 // In landscape the front camera sits on a short edge: left when the phone's top points left
@@ -679,7 +692,11 @@ function chunkEnd(v) {
 function flipIfChunkEnd() {
   if (mode !== 'pace' || pos >= words.length) return;
   const end = chunkEnd(pos);
-  if (end > pos && end - pos <= 2) { clockFrac = 0; setPos(end); if (pos >= words.length) setStat('סוף הטקסט', false); }
+  if (end > pos && end - pos <= 2) { clockFrac = 0; setPos(end); if (pos >= words.length) setStat('סוף הטקסט', false); return; }
+  // You paused at a comma or full stop: that pause was the punctuation. Move past it, and if the
+  // text was a word behind (pause right after the next word's punctuation), catch up.
+  if (punctPause(pos) > 0) { clockFrac = 0; setPos(pos + 1); }
+  else if (pos + 1 < words.length && punctPause(pos + 1) > 0 && clockFrac > 0.35) { clockFrac = 0; setPos(pos + 2); }
 }
 // jump a line (or a sentence part in sentence view) back or forward
 function lineStep(d) {

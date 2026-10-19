@@ -147,7 +147,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v15</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v16</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -209,6 +209,7 @@ details summary{color:var(--muted);cursor:pointer}
       <button class="btn" id="spdMinus" type="button" aria-label="גלילה איטית יותר">לאט −</button>
       <button class="btn" id="spdPlus" type="button" aria-label="גלילה מהירה יותר">מהר +</button>
       <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
+      <button class="btn" id="mirrorBtn" type="button">הפוך טקסט</button>
       <button class="btn rec" id="recBtn" type="button">● הקלט</button>
       <button class="btn" id="prevS" type="button">משפט קודם</button>
       <button class="btn" id="nextS" type="button">משפט הבא</button>
@@ -370,6 +371,7 @@ linesSel.addEventListener('change', () => { cfg.lines = +linesSel.value; save();
 mirrorIn.addEventListener('change', () => { cfg.mirror = mirrorIn.checked; save(); });
 const recordIn = $('#record');
 if (!cfg.rv13) { cfg.rv13 = 1; cfg.record = true; save(); }
+if (!cfg.rv16) { cfg.rv16 = 1; cfg.mirror = false; mirrorIn.checked = false; save(); }
 recordIn.checked = !!cfg.record && canRecord;
 function noRecReason() {
   const miss = [];
@@ -1271,6 +1273,11 @@ $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'pace' 
 $('#spdMinus').addEventListener('click', () => changeSpeed(-10));
 $('#spdPlus').addEventListener('click', () => changeSpeed(10));
 $('#linesBtn').addEventListener('click', cycleLines);
+$('#mirrorBtn').addEventListener('click', () => {
+  cfg.mirror = !cfg.mirror; mirrorIn.checked = cfg.mirror; save();
+  document.body.classList.toggle('mirror', cfg.mirror);
+  setStat(cfg.mirror ? 'הטקסט הפוך (ראי)' : 'הטקסט רגיל', true);
+});
 $('#prevS').addEventListener('click', prevSentence);
 $('#nextS').addEventListener('click', nextSentence);
 $('#fsMinus').addEventListener('click', () => changeFs(-4));

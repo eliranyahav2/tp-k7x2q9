@@ -176,7 +176,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v28</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v29</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -199,7 +199,7 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="punct"><option value="short">קצרה</option><option value="normal">רגילה</option><option value="long">ארוכה</option></select></div>
       <div class="ctl" id="rowHold"><div class="row"><label for="hold">עצירה אחרי שתיקה של</label></div>
         <select id="hold"><option value="200">0.2 שניות (מהיר)</option><option value="350">0.35 שניות</option><option value="600">0.6 שניות (רגוע)</option></select></div>
-      <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
+      <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="5"></div>
       <div class="ctl" id="rowView"><div class="row"><label for="viewSel">תצוגת הטקסט</label></div>
         <select id="viewSel"><option value="scroll">גלילה רציפה</option><option value="sent">משפט אחד ליד המצלמה</option></select></div>
       <div class="ctl" id="rowLines"><div class="row"><label for="linesSel" title="להציג רק את השורות הקרובות לעדשה">שורות מוצגות</label></div>
@@ -256,9 +256,9 @@ details summary{color:var(--muted);cursor:pointer}
       <button class="btn" id="moreBtn" type="button" aria-expanded="false">עוד ▴</button>
     </div>
     <div class="btns more" id="more" hidden>
-      <button class="btn" id="spdMinus" type="button" aria-label="איטי יותר">לאט −10</button>
+      <button class="btn" id="spdMinus" type="button" aria-label="איטי יותר">לאט −5</button>
       <span class="btn spdval" id="spdVal" role="status">120 מילים לדקה</span>
-      <button class="btn" id="spdPlus" type="button" aria-label="מהיר יותר">מהר +10</button>
+      <button class="btn" id="spdPlus" type="button" aria-label="מהיר יותר">מהר +5</button>
       <button class="btn" id="modeBtn" type="button">מצב: קול</button>
       <button class="btn" id="viewBtn" type="button">תצוגה: גלילה</button>
       <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
@@ -296,7 +296,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v28';
+const APP_VER = 'v29';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -439,6 +439,7 @@ linesSel.addEventListener('change', () => { cfg.lines = +linesSel.value; save();
 mirrorIn.addEventListener('change', () => { cfg.mirror = mirrorIn.checked; save(); });
 const recordIn = $('#record');
 if (!cfg.rv13) { cfg.rv13 = 1; cfg.record = true; save(); }
+if (!cfg.rv29) { cfg.rv29 = 1; cfg.view = 'sent'; viewSel.value = 'sent'; save(); }
 if (!cfg.rv17) { cfg.rv17 = 1; cfg.mirror = false; mirrorIn.checked = false; save(); }
 recordIn.checked = !!cfg.record && canRecord;
 function noRecReason() {
@@ -539,17 +540,12 @@ function build() {
   });
   starts = [];
   words.forEach((w, i) => { if (i === 0 || w.para || words[i - 1].end) starts.push(i); });
-  // sentence view: whole sentences, long ones cut at a comma (or every 14 words)
+  // sentence view: one whole sentence at a time
   segs = []; segOf = new Array(words.length);
   starts.forEach((st, k) => {
     const en = k + 1 < starts.length ? starts[k + 1] : words.length;
-    let a = st;
-    while (a < en) {
-      let b = Math.min(en, a + 14);
-      if (b < en) { for (let j = b - 1; j >= a + 5; j--) if (/[,;:]$/.test(words[j].raw)) { b = j + 1; break; } }
-      for (let j = a; j < b; j++) segOf[j] = segs.length;
-      segs.push([a, b]); a = b;
-    }
+    for (let j = st; j < en; j++) segOf[j] = segs.length;   // a whole sentence, always ending at its full stop
+    segs.push([st, en]);
   });
   const lens = words.map(w => w.n.length);
   avgLen = lens.length ? lens.reduce((x, y) => x + y, 0) / lens.length : 4;
@@ -559,6 +555,16 @@ function build() {
 let segs = [], segOf = [], avgLen = 4, dotEl = null, sentDot = null, shownSeg = -1, clockFrac = 0, hasNq = false;
 let lineTops = [], lineOf = [], linesDirty = true, pageStart = -1;
 function isSent() { return cfg.view === 'sent'; }
+// a long sentence shrinks (and if needed moves up) so the whole sentence stays on screen
+function fitSent() {
+  sentBox.style.fontSize = ''; sentBox.style.top = '';
+  const bar = $('#bar'), bottom = (bar ? bar.getBoundingClientRect().top : innerHeight) - 8;
+  const fits = () => sentBox.getBoundingClientRect().top + sentBox.scrollHeight <= bottom;
+  let f = cfg.fs;
+  while (!fits() && f > cfg.fs * 0.6) { f -= 2; sentBox.style.fontSize = f + 'px'; }
+  if (!fits()) sentBox.style.top = '8px';
+  while (!fits() && f > Math.max(18, cfg.fs * 0.4)) { f -= 2; sentBox.style.fontSize = f + 'px'; }
+}
 function renderSent() {
   if (!isSent() || !words.length) return;
   const v = clamp(view(), 0, words.length - 1), k = segOf[v];
@@ -571,6 +577,7 @@ function renderSent() {
       sentBox.appendChild(sp); sentBox.appendChild(document.createTextNode(' '));
     }
     sentDot = document.createElement('i'); sentDot.className = 'wdot'; sentBox.appendChild(sentDot);
+    fitSent();
   }
   const vv = view();
   sentBox.querySelectorAll('.w').forEach(sp => { const i = +sp.dataset.i; sp.classList.toggle('done', i < vv); sp.classList.toggle('cur', i === vv); });
@@ -648,7 +655,7 @@ function applyLayout() {
     veil = 'linear-gradient(to bottom,' + B + ' 0,' + B + ' ' + top + 'px,' + T + ' ' + (top + Math.round(lh * 0.12)) + 'px,' + T + ' ' + (bot - Math.round(lh * 0.1)) + 'px,' + B + ' ' + bot + 'px)';
   }
   prompter.style.setProperty('--veil', veil);
-  requestAnimationFrame(placeDot);
+  requestAnimationFrame(() => { if (isSent() && sentBox.childNodes.length) fitSent(); placeDot(); });
   ppwDirty = true;
 }
 let ppwDirty = true, ppw = 0;
@@ -1695,8 +1702,8 @@ $('#share').addEventListener('click', async () => {
 });
 $('#pause').addEventListener('click', () => setPaused(!paused));
 $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'pace' : mode === 'pace' ? 'auto' : (SR ? 'voice' : 'pace')));
-$('#spdMinus').addEventListener('click', () => changeSpeed(-10));
-$('#spdPlus').addEventListener('click', () => changeSpeed(10));
+$('#spdMinus').addEventListener('click', () => changeSpeed(-5));
+$('#spdPlus').addEventListener('click', () => changeSpeed(5));
 $('#linesBtn').addEventListener('click', cycleLines);
 $('#viewBtn').addEventListener('click', () => { cfg.view = isSent() ? 'scroll' : 'sent'; viewSel.value = cfg.view; save(); applyView(); aim(true); });
 $('#moreBtn').addEventListener('click', () => {

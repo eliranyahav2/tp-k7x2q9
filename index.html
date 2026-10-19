@@ -77,7 +77,8 @@ input[type=range]{width:100%;height:32px;accent-color:var(--accent)}
 
 /* ---------- prompter ---------- */
 #prompter{position:fixed;top:0;right:0;bottom:0;left:0;background:var(--bg);z-index:10;--fs:56px;--anchor:80px;--tick:120px;--colwid:60vw}
-#stage{position:absolute;top:0;right:0;bottom:0;left:0;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-mask-image:var(--mask,none);mask-image:var(--mask,none)}
+#stage{position:absolute;top:0;right:0;bottom:0;left:0;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transform:none}
+#veil{position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none;background:var(--veil,none)}
 #stage{transform:none}
 body.mirror #stage{transform:scaleX(-1)}
 #script{position:relative;width:var(--colwid);margin:0 auto;padding:var(--anchor) 0 75vh;text-align:center;font-size:var(--fs);line-height:1.55;font-weight:700;letter-spacing:0}
@@ -149,7 +150,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v18</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v19</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -182,6 +183,7 @@ details summary{color:var(--muted);cursor:pointer}
       <label class="check"><input type="checkbox" id="fade"> טשטוש שורות רחוקות</label>
       <label class="check"><input type="checkbox" id="record"> הקלט</label>
       <label class="check"><input type="checkbox" id="audioOnly"> קול בלבד (בלי וידאו)</label>
+      <label class="check"><input type="checkbox" id="preview"> הצג אותי בפינה בזמן הקלטה</label>
       <label class="check"><input type="checkbox" id="burn"> כתוביות בתוך הסרטון</label>
     </div>
     <p class="note" id="support" hidden></p>
@@ -200,6 +202,7 @@ details summary{color:var(--muted);cursor:pointer}
 <div id="prompter" hidden>
   <video id="cam" muted playsinline autoplay hidden></video>
   <div id="stage"><div id="script"></div></div>
+  <div id="veil"></div>
   <i class="tick r"></i><i class="tick l"></i>
   <canvas id="out" hidden></canvas>
   <div id="bar">
@@ -249,7 +252,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v18';
+const APP_VER = 'v19';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -398,6 +401,9 @@ if (!canRecord) {
   $('#recHint').textContent = 'אין הקלטה במכשיר הזה. סיבה: ' + noRecReason() + '. פתח את https://eliranyahav2.github.io/tp-k7x2q9/ ישירות בכרום.';
 }
 recordIn.addEventListener('change', () => { cfg.record = recordIn.checked; save(); });
+const prevIn = $('#preview');
+prevIn.checked = cfg.preview !== false;
+prevIn.addEventListener('change', () => { cfg.preview = prevIn.checked; save(); });
 const audioIn = $('#audioOnly');
 audioIn.checked = !!cfg.audioOnly && canRecord;
 audioIn.disabled = !canRecord;
@@ -486,13 +492,14 @@ function applyLayout() {
   prompter.style.setProperty('--tick', tickY + 'px');
   prompter.style.setProperty('--colwid', 'min(calc(100vw - 24px), max(260px, ' + colw() + 'vw))');
   const lh = cfg.fs * 1.55;
-  let mask = cfg.fade ? 'linear-gradient(to bottom,#000 0,#000 ' + Math.round(tickY + lh * 2.2) + 'px,transparent ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none';
+  const B = 'var(--bg)', T = 'rgba(10,14,19,0)';
+  let veil = cfg.fade ? 'linear-gradient(to bottom,' + T + ' 0,' + T + ' ' + Math.round(tickY + lh * 2.2) + 'px,' + B + ' ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none';
   if (cfg.lines > 0) {
     // show only the current line and the next ones, nothing above the eye line
     const top = Math.round(tickY - lh * 0.62), bot = Math.round(tickY + lh * (cfg.lines - 0.5) + lh * 0.12);
-    mask = 'linear-gradient(to bottom,transparent 0,transparent ' + top + 'px,#000 ' + (top + Math.round(lh * 0.12)) + 'px,#000 ' + (bot - Math.round(lh * 0.1)) + 'px,transparent ' + bot + 'px)';
+    veil = 'linear-gradient(to bottom,' + B + ' 0,' + B + ' ' + top + 'px,' + T + ' ' + (top + Math.round(lh * 0.12)) + 'px,' + T + ' ' + (bot - Math.round(lh * 0.1)) + 'px,' + B + ' ' + bot + 'px)';
   }
-  prompter.style.setProperty('--mask', mask);
+  prompter.style.setProperty('--veil', veil);
   ppwDirty = true;
 }
 let ppwDirty = true, ppw = 0;
@@ -877,7 +884,7 @@ async function startCamera() {
   const cam = $('#cam');
   if (!audioOnlyRun) {
     cam.srcObject = camStream;
-    cam.hidden = false;
+    cam.hidden = cfg.preview === false;
     try { const pl = cam.play(); if (pl && pl.catch) pl.catch(() => {}); } catch (e) {}
   }
   if (acx) {
@@ -1295,7 +1302,7 @@ async function buildReport() {
     try { const st = await navigator.permissions.query({ name: n }); L.push('perm.' + n + '=' + st.state); } catch (e) { L.push('perm.' + n + '=?'); }
   }
   try { const ds = await navigator.mediaDevices.enumerateDevices(); L.push('devices: video=' + ds.filter(d => d.kind === 'videoinput').length + ' audio=' + ds.filter(d => d.kind === 'audioinput').length); } catch (e) { L.push('devices=?'); }
-  L.push('cfg: mode=' + cfg.mode + ' record=' + cfg.record + ' audioOnly=' + !!cfg.audioOnly + ' burn=' + cfg.burn + ' orient=' + cfg.orient + ' qual=' + cfg.qual + ' mirror=' + cfg.mirror + ' wpm=' + cfg.wpm + ' lang=' + cfg.lang);
+  L.push('cfg: mode=' + cfg.mode + ' record=' + cfg.record + ' audioOnly=' + !!cfg.audioOnly + ' burn=' + cfg.burn + ' orient=' + cfg.orient + ' qual=' + cfg.qual + ' mirror=' + cfg.mirror + ' preview=' + (cfg.preview !== false) + ' fade=' + cfg.fade + ' lines=' + cfg.lines + ' wpm=' + cfg.wpm + ' lang=' + cfg.lang);
   L.push('last: camWhy=' + (camWhy || '-') + ' camNote=' + (camNote || '-') + ' recErrors=' + (recErrors.join('|') || '-') + ' srErrors=' + (srErrors.join('|') || '-') + ' speechEvents=' + speechEvents + ' peak=' + peak.toFixed(2) + ' fellBack=' + (fellBack || '-'));
   L.push('status=' + statEl.textContent);
   L.push(navigator.userAgent);

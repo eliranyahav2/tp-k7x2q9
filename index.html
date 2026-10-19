@@ -176,7 +176,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v26</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v27</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -197,7 +197,6 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="sens"><option value="high">גבוהה (חדר שקט)</option><option value="mid">רגילה</option><option value="low">נמוכה (רעש ברקע)</option></select></div>
       <div class="ctl" id="rowHold"><div class="row"><label for="hold">עצירה אחרי שתיקה של</label></div>
         <select id="hold"><option value="200">0.2 שניות (מהיר)</option><option value="350">0.35 שניות</option><option value="600">0.6 שניות (רגוע)</option></select></div>
-      <div class="ctl" id="rowAdapt"><label class="check"><input type="checkbox" id="adapt"> להתאים מהירות לקצב הדיבור (לפי הברות)</label></div>
       <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
       <div class="ctl" id="rowView"><div class="row"><label for="viewSel">תצוגת הטקסט</label></div>
         <select id="viewSel"><option value="scroll">גלילה רציפה</option><option value="sent">משפט אחד ליד המצלמה</option></select></div>
@@ -295,7 +294,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v26';
+const APP_VER = 'v27';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -402,12 +401,12 @@ function syncOutputs() {
 }
 function applyModeUI() {
   $('#modeHint').textContent = cfg.mode === 'voice' ? 'הטקסט עוקב אחרי המילים שאתה אומר. עובד טוב במחשב. אם בטלפון זה לא עובד, הכלי עובר לבד ל"קצב לפי הקול".'
-    : cfg.mode === 'pace' ? 'הטקסט זז רק כשאתה מדבר ונעצר כשאתה שותק. עובד בטלפון גם בזמן הקלטת וידאו. המהירות למטה היא הקצב הרגיל שלך; עם התאמה להברות הטקסט מאיץ כשאתה מדבר מהר ומאט כשאתה מדבר לאט.'
+    : cfg.mode === 'pace' ? 'הטקסט זז רק כשאתה מדבר ונעצר כשאתה שותק. עובד בטלפון גם בזמן הקלטת וידאו. המהירות נקבעת למטה.'
     : 'הטקסט זז במהירות קבועה. הקשה על הטקסט עוצרת וממשיכה.';
   $('#rowLang').hidden = cfg.mode !== 'voice';
   $('#rowLead').hidden = cfg.mode !== 'voice';
   $('#rowSpeed').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
-  $('#rowSens').hidden = $('#rowHold').hidden = $('#rowAdapt').hidden = cfg.mode !== 'pace';
+  $('#rowSens').hidden = $('#rowHold').hidden = cfg.mode !== 'pace';
 }
 text.value = cfg.text;
 const colwIn = $('#colw'), fadeIn = $('#fade');
@@ -425,9 +424,7 @@ const sensSel = $('#sens'), holdSel = $('#hold');
 sensSel.value = cfg.sens || 'mid'; holdSel.value = String(cfg.hold || 350);
 sensSel.addEventListener('change', () => { cfg.sens = sensSel.value; save(); });
 holdSel.addEventListener('change', () => { cfg.hold = +holdSel.value; save(); });
-const adaptIn = $('#adapt');
-adaptIn.checked = cfg.adapt !== false;
-adaptIn.addEventListener('change', () => { cfg.adapt = adaptIn.checked; save(); });
+
 const viewSel = $('#viewSel');
 viewSel.value = cfg.view === 'sent' ? 'sent' : 'scroll';
 viewSel.addEventListener('change', () => { cfg.view = viewSel.value; save(); });
@@ -805,12 +802,12 @@ function loop(t) {
   }
   if (mode === 'pace' && analyser) {
     const talking = t < voiceUntil;
-    if (cfg.adapt !== false) sylStep(t, talking); else paceMul = 1;
+    paceMul = 1;   // fixed speed: the text moves at the chosen speed while you talk
     if (talking !== wasTalking && !paused && started) {
       if (wasTalking && !talking) flipIfChunkEnd();   // stopped at the end of what is shown: show the next part
       wasTalking = talking; setStat(talking ? 'מדבר… ' + cfg.wpm + ' מילים לדקה' : 'ממתין לקול…', talking); mulShownT = 0;
     }
-    if (talking && !paused && started && cfg.adapt !== false && t - mulShownT > 600) {
+    if (false) {
       mulShownT = t;
       setStat('מדבר… ' + Math.round(cfg.wpm * paceMul) + ' מילים לדקה (רגיל ' + cfg.wpm + ' ×' + paceMul.toFixed(1) + ')', true);
     }

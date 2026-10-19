@@ -147,11 +147,12 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v14</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v15</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
       <label><input type="radio" name="mode" value="voice"><span>לפי הקול</span></label>
+      <label><input type="radio" name="mode" value="pace"><span>קצב לפי הקול</span></label>
       <label><input type="radio" name="mode" value="auto"><span>גלילה אוטומטית</span></label>
     </div>
     <div class="grid2">
@@ -349,7 +350,7 @@ function syncOutputs() {
 function applyModeUI() {
   $('#rowLang').hidden = cfg.mode !== 'voice';
   $('#rowLead').hidden = cfg.mode !== 'voice';
-  $('#rowSpeed').hidden = cfg.mode !== 'auto';
+  $('#rowSpeed').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
 }
 text.value = cfg.text;
 const colwIn = $('#colw'), fadeIn = $('#fade');
@@ -557,14 +558,20 @@ function setStat(msg, listening) {
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000 || 0);
   lastT = t;
+  let lvl = 0;
   if (analyser) {
     analyser.getByteTimeDomainData(abuf);
-    let m = 0;
-    for (let i = 0; i < abuf.length; i++) { const d = Math.abs(abuf[i] - 128) / 128; if (d > m) m = d; }
-    if (m > peak) peak = m;
+    for (let i = 0; i < abuf.length; i++) { const d = Math.abs(abuf[i] - 128) / 128; if (d > lvl) lvl = d; }
+    if (lvl > peak) peak = lvl;
   }
   if (useCv && outCtx && camStream) drawOut();
-  if (mode === 'auto' && !paused && started) {
+  if (mode === 'pace' && analyser) {
+    if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.002;
+    if (lvl > noiseFloor + 0.05) voiceUntil = t + 700;
+    const talking = t < voiceUntil;
+    if (talking !== wasTalking && !paused && started) { wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); }
+  }
+  if ((mode === 'auto' || mode === 'pace') && !paused && started && (mode === 'auto' || t < voiceUntil)) {
     if (ppwDirty) calcPpw();
     target = Math.min(maxScroll(), target + cfg.wpm / 60 * ppw * dt);
     if (target >= maxScroll() - 0.5) setStat('סוף הטקסט', false);
@@ -573,6 +580,23 @@ function loop(t) {
   curY += Math.abs(diff) < 0.3 ? diff : diff * Math.min(1, dt * 16);
   stage.scrollTop = curY;
   raf = requestAnimationFrame(loop);
+}
+
+/* pace mode: scroll only while the mic hears speech (works together with recording) */
+let noiseFloor = 0, voiceUntil = 0, wasTalking = false, paceStream = null, paceAcx = null;
+async function ensurePaceMeter() {
+  if (analyser || paceStream) return;
+  try {
+    paceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    paceAcx = new (window.AudioContext || window.webkitAudioContext)(); paceAcx.resume();
+    analyser = paceAcx.createAnalyser(); analyser.fftSize = 1024;
+    paceAcx.createMediaStreamSource(paceStream).connect(analyser);
+    abuf = new Uint8Array(analyser.fftSize);
+  } catch (e) { stopPaceMeter(); setStat('אין גישה למיקרופון. עבור לגלילה אוטומטית.', false); }
+}
+function stopPaceMeter() {
+  if (paceStream) { paceStream.getTracks().forEach(t => t.stop()); paceStream = null; if (analyser) analyser = null; }
+  if (paceAcx) { try { paceAcx.close(); } catch (e) {} paceAcx = null; }
 }
 
 /* speech recognition */
@@ -666,8 +690,11 @@ function exitFull() {
 }
 function lockOrient() {
   const o = cfg.orient;
-  if (!cfg.record || o === 'auto' || !(screen.orientation && screen.orientation.lock)) return;
-  try { const p = screen.orientation.lock(o === 'port' ? 'portrait' : 'landscape'); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  if (o === 'auto' || !(screen.orientation && screen.orientation.lock)) return;
+  const cur = (screen.orientation.type || '');
+  const want = o === 'port' ? 'portrait' : 'landscape';
+  const target = cur.indexOf(want) === 0 ? cur : want;   // stay on the side the phone is already held
+  try { const p = screen.orientation.lock(target); if (p && p.catch) p.catch(() => {}); } catch (e) {}
 }
 function unlockOrient() { try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {} }
 function syncFull() {
@@ -706,8 +733,8 @@ function posFromScroll() {
   return words.length;
 }
 function renderModeBtn() {
-  $('#modeBtn').textContent = mode === 'voice' ? 'מצב: קול' : 'מצב: גלילה';
-  $('#spdMinus').hidden = $('#spdPlus').hidden = mode !== 'auto';
+  $('#modeBtn').textContent = mode === 'voice' ? 'מצב: קול' : mode === 'pace' ? 'מצב: קצב קול' : 'מצב: גלילה';
+  $('#spdMinus').hidden = $('#spdPlus').hidden = mode === 'voice';
 }
 function renderLinesBtn() { $('#linesBtn').textContent = cfg.lines ? 'שורות: ' + cfg.lines : 'שורות: הכל'; }
 function changeSpeed(d) {
@@ -725,19 +752,20 @@ function cycleLines() {
 function setMode(m) {
   if (m === 'voice' && !SR) { setStat('אין תמיכה בזיהוי דיבור בדפדפן הזה.', false); return; }
   stopRec();
+  if (m === 'pace') { wasTalking = false; voiceUntil = 0; ensurePaceMeter(); }
   const was = mode;
   mode = m;
   cfg.mode = m;
   save();
   renderModeBtn();
   if (m === 'voice') {
-    if (was === 'auto') { pos = Math.max(0, posFromScroll() - cfg.lead); paintAll(); }
+    if (was !== 'voice') { pos = Math.max(0, posFromScroll() - cfg.lead); paintAll(); }
     lastSync = Date.now();
     aim(false);
     if (!paused) startRec(); else setStat('מושהה', false);
   } else {
     target = curY;
-    setStat(paused ? 'מושהה' : 'גלילה אוטומטית', !paused);
+    setStat(paused ? 'מושהה' : m === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית', !paused);
   }
 }
 function setPaused(v) {
@@ -745,7 +773,7 @@ function setPaused(v) {
   $('#pause').textContent = v ? 'המשך' : 'השהה';
   if (v) { stopRec(); setStat('מושהה', false); }
   else if (mode === 'voice') { lastSync = Date.now(); startRec(); }
-  else setStat('גלילה אוטומטית', true);
+  else setStat(mode === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית', true);
 }
 
 /* recording */
@@ -759,6 +787,7 @@ const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function startCamera() {
+  stopPaceMeter();
   recErrors = []; srErrors = []; camWhy = ''; speechEvents = 0; peak = 0; trackMuted = false; chunks = []; mr = null;
   // created inside the tap, before any await, so mobile browsers let the audio meter run
   try { acx = new (window.AudioContext || window.webkitAudioContext)(); acx.resume(); } catch (e) { acx = null; }
@@ -1043,7 +1072,8 @@ async function openPrompter() {
   build();
   if (!words.length) { errEl.textContent = 'הדבק קודם טקסט להקראה.'; errEl.hidden = false; return; }
   running = true; paused = false; fatal = false;
-  mode = cfg.mode === 'voice' && SR ? 'voice' : 'auto';
+  mode = cfg.mode === 'voice' && SR ? 'voice' : cfg.mode === 'pace' ? 'pace' : 'auto';
+  wasTalking = false; voiceUntil = 0; noiseFloor = 0.02;
   pos = 0; paintedPos = 0;
   document.body.classList.toggle('mirror', cfg.mirror);
   document.documentElement.classList.add('lock');
@@ -1091,9 +1121,12 @@ async function openPrompter() {
   }
   started = true;
   lastSync = Date.now();
-  if (mode === 'voice') startRec(); else setStat('גלילה אוטומטית', true);
+  if (mode === 'voice') startRec();
+  else if (mode === 'pace') { setStat('התחל לדבר…', true); ensurePaceMeter(); }
+  else setStat('גלילה אוטומטית', true);
 }
 function closePrompter() {
+  stopPaceMeter();
   const wasRecording = recording;
   running = false;
   started = false;
@@ -1234,7 +1267,7 @@ $('#share').addEventListener('click', async () => {
   try { await navigator.share({ files: [resultFile] }); } catch (err) {}
 });
 $('#pause').addEventListener('click', () => setPaused(!paused));
-$('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'auto' : 'voice'));
+$('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'pace' : mode === 'pace' ? 'auto' : (SR ? 'voice' : 'pace')));
 $('#spdMinus').addEventListener('click', () => changeSpeed(-10));
 $('#spdPlus').addEventListener('click', () => changeSpeed(10));
 $('#linesBtn').addEventListener('click', cycleLines);
@@ -1247,7 +1280,7 @@ $('#colPlus').addEventListener('click', () => changeCol(4));
 $('#lineUp').addEventListener('click', () => changeAnchor(-1));
 $('#lineDown').addEventListener('click', () => changeAnchor(1));
 stage.addEventListener('click', e => {
-  if (mode === 'auto') { setPaused(!paused); return; }
+  if (mode !== 'voice') { setPaused(!paused); return; }
   const w = e.target.closest('.w');
   if (w) jumpTo(+w.dataset.i);
 });

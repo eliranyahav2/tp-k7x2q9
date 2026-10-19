@@ -63,10 +63,10 @@ select{background:var(--surface);border:1px solid var(--line);border-radius:8px;
 input[type=range]{width:100%;height:32px;accent-color:var(--accent)}
 .check{display:flex;gap:10px;align-items:center;font-weight:400}
 .check input{width:20px;height:20px;accent-color:var(--accent)}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
 .seg label{position:relative;display:block;font-weight:600}
 .seg input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
-.seg span{display:block;text-align:center;padding:10px 8px;border-radius:9px;color:var(--muted)}
+.seg span{display:block;text-align:center;padding:10px 4px;font-size:.92rem;border-radius:9px;color:var(--muted)}
 .seg input:checked + span{background:var(--accent);color:var(--on-accent)}
 .seg input:focus-visible + span{outline:2px solid var(--fg);outline-offset:2px}
 .seg input:disabled + span{opacity:.4}
@@ -89,6 +89,7 @@ body.mirror #stage{transform:scaleX(-1)}
 .tick.l{left:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 0 9px 13px;border-color:transparent transparent transparent var(--accent)}
 
 #bar{position:fixed;right:0;left:0;bottom:0;padding:26px 12px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,rgba(10,14,19,.98) 68%,rgba(10,14,19,0))}
+.recfail.note{background:rgba(255,209,102,.12);border-color:var(--accent);color:var(--accent)}
 .recfail{background:rgba(255,155,138,.14);border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:.9rem;font-weight:600}
 .meter{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:10px}
 #progress{display:block;height:100%;width:0;background:var(--accent)}
@@ -147,7 +148,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v16</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v17</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -155,6 +156,7 @@ details summary{color:var(--muted);cursor:pointer}
       <label><input type="radio" name="mode" value="pace"><span>קצב לפי הקול</span></label>
       <label><input type="radio" name="mode" value="auto"><span>גלילה אוטומטית</span></label>
     </div>
+    <p class="hint" id="modeHint"></p>
     <div class="grid2">
       <div class="ctl"><div class="row"><label for="fs">גודל טקסט</label><output id="fsOut"></output></div><input type="range" id="fs" min="28" max="110" step="2"></div>
       <div class="ctl"><div class="row"><label for="anchor" title="ככל שהשורה גבוהה יותר היא קרובה יותר לעדשה הקדמית">גובה השורה</label><output id="anchorOut"></output></div><input type="range" id="anchor" min="0" max="50" step="1"></div>
@@ -175,7 +177,7 @@ details summary{color:var(--muted);cursor:pointer}
     </div>
     <div class="checks">
       <label class="check"><input type="checkbox" id="full"> מסך מלא</label>
-      <label class="check"><input type="checkbox" id="mirror"> הפוך אופקית</label>
+      <label class="check"><input type="checkbox" id="mirror"> טקסט במראה (רק לזכוכית טלפרומפטר)</label>
       <label class="check"><input type="checkbox" id="fade"> טשטוש שורות רחוקות</label>
       <label class="check"><input type="checkbox" id="record"> הקלט</label>
       <label class="check"><input type="checkbox" id="audioOnly"> קול בלבד (בלי וידאו)</label>
@@ -186,8 +188,10 @@ details summary{color:var(--muted);cursor:pointer}
     <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה" ואז "שמור סרטון". "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
   </section>
   <button class="go" id="go" type="button">התחל</button>
+  <p class="hint" id="instHint" hidden>להתקנה כאפליקציה: בכרום לוחצים ⋮ (למעלה) ובוחרים "התקנת אפליקציה" או "הוספה למסך הבית".</p>
   <button class="btn2" id="install" type="button" hidden style="min-height:46px;border-radius:12px;font-weight:700">התקן כאפליקציה בטלפון</button>
   <button class="btn2" id="diag" type="button" style="min-height:46px;border-radius:12px;font-weight:700">בדיקת מכשיר (20 שניות)</button>
+  <button class="btn2" id="copyRep" type="button" style="min-height:46px;border-radius:12px;font-weight:700">העתק דוח תקלה (להדבקה בצ'אט)</button>
   <pre id="diagOut" hidden style="direction:rtl;text-align:right;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;font:.85rem/1.5 var(--font-ui);margin:0"></pre>
   <p class="err" id="err" role="alert" hidden></p>
 </main>
@@ -200,6 +204,7 @@ details summary{color:var(--muted);cursor:pointer}
   <div id="bar">
     <div class="meter"><i id="progress"></i></div>
     <div class="recfail" id="recFail" role="alert" hidden></div>
+    <div class="recfail note" id="note" role="status" hidden></div>
     <div class="status"><span id="dot"></span><span id="recTag" hidden></span><span id="stat"></span><span id="heard"></span></div>
     <div class="btns">
       <button class="btn primary" id="exit" type="button">סיום</button>
@@ -209,7 +214,6 @@ details summary{color:var(--muted);cursor:pointer}
       <button class="btn" id="spdMinus" type="button" aria-label="גלילה איטית יותר">לאט −</button>
       <button class="btn" id="spdPlus" type="button" aria-label="גלילה מהירה יותר">מהר +</button>
       <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
-      <button class="btn" id="mirrorBtn" type="button">הפוך טקסט</button>
       <button class="btn rec" id="recBtn" type="button">● הקלט</button>
       <button class="btn" id="prevS" type="button">משפט קודם</button>
       <button class="btn" id="nextS" type="button">משפט הבא</button>
@@ -244,6 +248,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const APP_VER = 'v17';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -349,6 +354,9 @@ function syncOutputs() {
   $('#speedOut').textContent = cfg.wpm + ' מילים לדקה';
 }
 function applyModeUI() {
+  $('#modeHint').textContent = cfg.mode === 'voice' ? 'הטקסט עוקב אחרי המילים שאתה אומר. עובד טוב במחשב. אם בטלפון זה לא עובד, הכלי עובר לבד ל"קצב לפי הקול".'
+    : cfg.mode === 'pace' ? 'הטקסט זז רק כשאתה מדבר ונעצר כשאתה שותק. עובד בטלפון גם בזמן הקלטת וידאו. המהירות נקבעת למטה.'
+    : 'הטקסט זז במהירות קבועה. הקשה על הטקסט עוצרת וממשיכה.';
   $('#rowLang').hidden = cfg.mode !== 'voice';
   $('#rowLead').hidden = cfg.mode !== 'voice';
   $('#rowSpeed').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
@@ -371,7 +379,7 @@ linesSel.addEventListener('change', () => { cfg.lines = +linesSel.value; save();
 mirrorIn.addEventListener('change', () => { cfg.mirror = mirrorIn.checked; save(); });
 const recordIn = $('#record');
 if (!cfg.rv13) { cfg.rv13 = 1; cfg.record = true; save(); }
-if (!cfg.rv16) { cfg.rv16 = 1; cfg.mirror = false; mirrorIn.checked = false; save(); }
+if (!cfg.rv17) { cfg.rv17 = 1; cfg.mirror = false; mirrorIn.checked = false; save(); }
 recordIn.checked = !!cfg.record && canRecord;
 function noRecReason() {
   const miss = [];
@@ -567,9 +575,12 @@ function loop(t) {
     if (lvl > peak) peak = lvl;
   }
   if (useCv && outCtx && camStream) drawOut();
-  if (mode === 'pace' && analyser) {
+  if (analyser) {
     if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.002;
     if (lvl > noiseFloor + 0.05) voiceUntil = t + 700;
+    if (mode === 'voice' && running && !paused && t < voiceUntil) talkMs += dt * 1000;
+  }
+  if (mode === 'pace' && analyser) {
     const talking = t < voiceUntil;
     if (talking !== wasTalking && !paused && started) { wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); }
   }
@@ -594,7 +605,10 @@ async function ensurePaceMeter() {
     analyser = paceAcx.createAnalyser(); analyser.fftSize = 1024;
     paceAcx.createMediaStreamSource(paceStream).connect(analyser);
     abuf = new Uint8Array(analyser.fftSize);
-  } catch (e) { stopPaceMeter(); setStat('אין גישה למיקרופון. עבור לגלילה אוטומטית.', false); }
+  } catch (e) {
+    stopPaceMeter();
+    if (running && mode === 'pace') { showNote('אין גישה למיקרופון (' + camText(e && e.name) + '). עברתי לגלילה אוטומטית.'); setMode('auto'); modeRadios(); }
+  }
 }
 function stopPaceMeter() {
   if (paceStream) { paceStream.getTracks().forEach(t => t.stop()); paceStream = null; if (analyser) analyser = null; }
@@ -602,6 +616,26 @@ function stopPaceMeter() {
 }
 
 /* speech recognition */
+let srStartAt = 0, srAudioSeen = false, srSpeechAt = 0, talkMs = 0, srErrCount = 0, fellBack = '', srWatch = 0;
+function resetSrWatch() { srStartAt = Date.now(); srAudioSeen = false; srSpeechAt = 0; talkMs = 0; srErrCount = 0; }
+function showNote(msg) { const el = $('#note'); el.hidden = !msg; el.textContent = msg || ''; }
+function checkSr() {
+  if (!running || paused || mode !== 'voice' || !SR) return;
+  const now = Date.now();
+  let why = '';
+  if (fatal) why = srErrors.join(', ') || 'שגיאה';
+  else if (analyser && talkMs > 6000) why = 'דיברת ולא זוהו מילים';
+  else if (!analyser && speechEvents === 0 && srSpeechAt && now - srSpeechAt > 8000) why = 'דיברת ולא זוהו מילים';
+  else if (speechEvents === 0 && srErrCount >= 3) why = srErrors.join(', ');
+  else if (speechEvents === 0 && !srAudioSeen && now - srStartAt > 12000) why = 'שירות הדיבור לא נפתח';
+  if (!why) return;
+  fellBack = why;
+  showNote('זיהוי הדיבור לא עובד כאן (' + why + '). עברתי ל"קצב לפי הקול": הטקסט זז כשאתה מדבר ונעצר כשאתה שותק. מהירות: כפתורי לאט/מהר.');
+  fatal = false;
+  setMode('pace');
+  modeRadios();
+}
+function modeRadios() { document.querySelectorAll('input[name=mode]').forEach(r => { r.checked = r.value === cfg.mode; }); applyModeUI(); }
 let rec = null, fatal = false;
 let srErrors = [];
 function stopRec() {
@@ -622,10 +656,13 @@ function startRec() {
   r.interimResults = true;
   r.maxAlternatives = 1;
   r.onstart = () => setStat('מקשיב…', true);
+  r.onaudiostart = () => { srAudioSeen = true; };
+  r.onspeechstart = () => { if (!srSpeechAt) srSpeechAt = Date.now(); };
   r.onresult = onResult;
   r.onerror = ev => {
     const e = ev.error;
     if (e && !srErrors.includes(e) && srErrors.length < 6) srErrors.push(e);
+    if (e && e !== 'no-speech' && e !== 'aborted') srErrCount++;
     if (e === 'not-allowed' || e === 'service-not-allowed') {
       fatal = true;
       setStat('אין הרשאה למיקרופון. אשר גישה בדפדפן (נדרשת כתובת https).', false);
@@ -660,6 +697,7 @@ function beginSR(r) {
 }
 function onResult(e) {
   speechEvents++;
+  talkMs = 0; srSpeechAt = 0;
   let t = '';
   for (let i = 0; i < e.results.length; i++) t += ' ' + e.results[i][0].transcript;
   const raw = t.trim().split(/\s+/).filter(Boolean);
@@ -691,6 +729,7 @@ function exitFull() {
   try { const p = ex && ex.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {}
 }
 function lockOrient() {
+  return;
   const o = cfg.orient;
   if (o === 'auto' || !(screen.orientation && screen.orientation.lock)) return;
   const cur = (screen.orientation.type || '');
@@ -761,6 +800,7 @@ function setMode(m) {
   save();
   renderModeBtn();
   if (m === 'voice') {
+    resetSrWatch(); showNote('');
     if (was !== 'voice') { pos = Math.max(0, posFromScroll() - cfg.lead); paintAll(); }
     lastSync = Date.now();
     aim(false);
@@ -783,14 +823,22 @@ let started = false, usedVoice = false;
 let camStream = null, mr = null, chunks = [], mime = '', recording = false, recStart = 0, recTimer = 0;
 let speechEvents = 0, peak = 0, acx = null, analyser = null, abuf = null, trackMuted = false, recErrors = [];
 let resultUrl = '', resultFile = null;
-let camWhy = '', audioOnlyRun = false;
+let camWhy = '', audioOnlyRun = false, camNote = '';
+const PERM_HELP = 'כדי לאשר: בכרום ⋮ ← הגדרות ← הגדרות אתרים ← מצלמה (ואז מיקרופון) ← eliranyahav2.github.io ← אפשר. אם עדיין חסום: הגדרות הטלפון ← אפליקציות ← Chrome ← הרשאות ← מצלמה ומיקרופון ← אפשר.';
+function camText(nm) {
+  return nm === 'NotAllowedError' ? 'ההרשאה נדחתה. ' + PERM_HELP
+    : nm === 'NotFoundError' ? 'לא נמצאה מצלמה או מיקרופון'
+    : nm === 'NotReadableError' ? 'המצלמה תפוסה על ידי אפליקציה אחרת. סגור אותה ונסה שוב'
+    : nm === 'SecurityError' ? 'הדף חייב להיפתח מכתובת https'
+    : nm === 'OverconstrainedError' ? 'המצלמה לא תומכת בהגדרות' : (nm || 'שגיאה לא ידועה');
+}
 let burn = false, useCv = false, burnUsed = false, outCtx = null, capChunks = [], capOf = [], capIdx = 0, capIdxT = 0, recBusy = false;
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function startCamera() {
   stopPaceMeter();
-  recErrors = []; srErrors = []; camWhy = ''; speechEvents = 0; peak = 0; trackMuted = false; chunks = []; mr = null;
+  recErrors = []; srErrors = []; camWhy = ''; camNote = ''; speechEvents = 0; peak = 0; trackMuted = false; chunks = []; mr = null;
   // created inside the tap, before any await, so mobile browsers let the audio meter run
   try { acx = new (window.AudioContext || window.webkitAudioContext)(); acx.resume(); } catch (e) { acx = null; }
   try {
@@ -798,7 +846,7 @@ async function startCamera() {
     audioOnlyRun = !!cfg.audioOnly;
     if (audioOnlyRun) {
       camStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } else try {
+    } else try { try {
       camStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'user' }, width: { ideal: hq ? 1920 : 1280 }, height: { ideal: hq ? 1080 : 720 }, frameRate: { ideal: 30 } },
         audio: true
@@ -806,12 +854,18 @@ async function startCamera() {
     } catch (e1) {
       if (e1 && (e1.name === 'NotAllowedError' || e1.name === 'SecurityError')) throw e1;
       camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });   // plain retry for picky phones
+    } } catch (ev) {
+      // camera refused or busy: still record the voice rather than nothing
+      recErrors.push('video:' + (ev && ev.name));
+      try { camStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (ea) { throw ev; }
+      audioOnlyRun = true;
+      camNote = 'המצלמה לא זמינה (' + camText(ev && ev.name) + '). מקליט קול בלבד.';
     }
   } catch (e) {
     camStream = null;
     recErrors.push('getUserMedia:' + (e && e.name));
     const nm = e && e.name;
-    camWhy = nm === 'NotAllowedError' ? 'ההרשאה למצלמה או למיקרופון נדחתה. באנדרואיד: לחיצה ארוכה על אייקון האפליקציה, פרטי אפליקציה, הרשאות, ולאפשר מצלמה ומיקרופון.'
+    camWhy = nm === 'NotAllowedError' ? 'ההרשאה למצלמה או למיקרופון נדחתה. ' + PERM_HELP
       : nm === 'NotFoundError' ? 'לא נמצאה מצלמה או מיקרופון.'
       : nm === 'NotReadableError' ? 'המצלמה תפוסה על ידי אפליקציה אחרת. סגור אותה ונסה שוב.'
       : nm === 'SecurityError' ? 'הדף חייב להיפתח מכתובת https.' : '';
@@ -832,6 +886,7 @@ async function startCamera() {
       abuf = new Uint8Array(analyser.fftSize);
     } catch (e) { analyser = null; recErrors.push('audioContext:' + (e && e.name)); }
   }
+  if (camNote) showNote(camNote);
   const at = camStream.getAudioTracks()[0];
   if (at) at.onmute = () => { trackMuted = true; };
   burn = !!cfg.burn;
@@ -1049,6 +1104,7 @@ function showResult(blob, secs) {
   const srOk = speechEvents > 0, audioOk = peak > 0.03 && !trackMuted;
   let msg, bad = true;
   if (!blob.size) msg = 'ההקלטה יצאה ריקה. נסה שוב.';
+  else if (fellBack && audioOk) { msg = 'ההקלטה מוכנה. זיהוי המילים לא עבד במכשיר הזה, אז הטקסט עבר לבד ל"קצב לפי הקול". בפעם הבאה הוא יתחיל ישר במצב הזה.'; bad = false; }
   else if (usedVoice) {
     if (srOk && audioOk) { msg = 'הקלטה וזיהוי קול עבדו יחד. נגן את הסרטון ובדוק שיש בו קול.'; bad = false; }
     else if (srOk) msg = 'הטקסט עקב אחרי הקול אבל הקול בסרטון יצא שקט. בטלפון הזה ההקלטה והזיהוי הקולי מפריעים זה לזה. עבור למצב גלילה אוטומטית.';
@@ -1056,9 +1112,11 @@ function showResult(blob, secs) {
     else msg = 'לא נקלט קול. בדוק הרשאות מיקרופון ודבר קרוב יותר.';
   } else if (audioOk) { msg = 'ההקלטה מוכנה. נגן ובדוק שיש בה קול.'; bad = false; }
   else msg = 'הסרטון יצא שקט. בדוק את המיקרופון.';
+  if (audioOnlyRun) msg = msg.replace('הסרטון קלט קול', 'ההקלטה קלטה קול').replace('הקול בסרטון יצא שקט', 'הקול בהקלטה יצא שקט')
+    .replace('הסרטון יצא שקט', 'ההקלטה יצאה שקטה').replace('נגן את הסרטון', 'נגן את ההקלטה');
   verdict.textContent = msg;
   verdict.classList.toggle('bad', bad);
-  $('#report').value = ['seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
+  $('#report').value = [APP_VER, 'audioOnly=' + audioOnlyRun, 'fellBack=' + (fellBack || 'no'), 'seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
     'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'errors=' + (recErrors.join('|') || 'none'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
   const sh = $('#share');
   sh.hidden = !(resultFile && navigator.canShare && navigator.canShare({ files: [resultFile] }));
@@ -1076,6 +1134,8 @@ async function openPrompter() {
   running = true; paused = false; fatal = false;
   mode = cfg.mode === 'voice' && SR ? 'voice' : cfg.mode === 'pace' ? 'pace' : 'auto';
   wasTalking = false; voiceUntil = 0; noiseFloor = 0.02;
+  srErrors = []; speechEvents = 0; fellBack = ''; showNote(''); resetSrWatch();
+  clearInterval(srWatch); srWatch = setInterval(checkSr, 1000);
   pos = 0; paintedPos = 0;
   document.body.classList.toggle('mirror', cfg.mirror);
   document.documentElement.classList.add('lock');
@@ -1123,12 +1183,13 @@ async function openPrompter() {
   }
   started = true;
   lastSync = Date.now();
-  if (mode === 'voice') startRec();
+  if (mode === 'voice') { resetSrWatch(); startRec(); }
   else if (mode === 'pace') { setStat('התחל לדבר…', true); ensurePaceMeter(); }
   else setStat('גלילה אוטומטית', true);
 }
 function closePrompter() {
   stopPaceMeter();
+  clearInterval(srWatch);
   const wasRecording = recording;
   running = false;
   started = false;
@@ -1220,9 +1281,35 @@ async function runDiag() {
   btn.disabled = false;
 }
 $('#diag').addEventListener('click', runDiag);
+async function buildReport() {
+  const L = [];
+  L.push(APP_VER + ' | ' + new Date().toISOString());
+  L.push('url=' + location.protocol + '//' + location.host + location.pathname);
+  L.push('secure=' + window.isSecureContext + ' installed=' + matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+  L.push('screen=' + innerWidth + 'x' + innerHeight + ' orient=' + ((screen.orientation && screen.orientation.type) || '?') + ' touch=' + navigator.maxTouchPoints);
+  L.push('SR=' + !!SR + ' MediaRecorder=' + !!window.MediaRecorder + ' gUM=' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+  for (const n of ['camera', 'microphone']) {
+    try { const st = await navigator.permissions.query({ name: n }); L.push('perm.' + n + '=' + st.state); } catch (e) { L.push('perm.' + n + '=?'); }
+  }
+  try { const ds = await navigator.mediaDevices.enumerateDevices(); L.push('devices: video=' + ds.filter(d => d.kind === 'videoinput').length + ' audio=' + ds.filter(d => d.kind === 'audioinput').length); } catch (e) { L.push('devices=?'); }
+  L.push('cfg: mode=' + cfg.mode + ' record=' + cfg.record + ' audioOnly=' + !!cfg.audioOnly + ' burn=' + cfg.burn + ' orient=' + cfg.orient + ' qual=' + cfg.qual + ' mirror=' + cfg.mirror + ' wpm=' + cfg.wpm + ' lang=' + cfg.lang);
+  L.push('last: camWhy=' + (camWhy || '-') + ' camNote=' + (camNote || '-') + ' recErrors=' + (recErrors.join('|') || '-') + ' srErrors=' + (srErrors.join('|') || '-') + ' speechEvents=' + speechEvents + ' peak=' + peak.toFixed(2) + ' fellBack=' + (fellBack || '-'));
+  L.push('status=' + statEl.textContent);
+  L.push(navigator.userAgent);
+  return L.join('\n');
+}
+$('#copyRep').addEventListener('click', async () => {
+  const txt = await buildReport();
+  const out = $('#diagOut');
+  out.hidden = false;
+  let ok = false;
+  try { await navigator.clipboard.writeText(txt); ok = true; } catch (e) {}
+  out.textContent = (ok ? 'הדוח הועתק. הדבק אותו בצ\'אט עם Claude.\n\n' : 'סמן את הטקסט, העתק והדבק בצ\'אט:\n\n') + txt;
+});
 
 /* installable app */
 let installEvt = null;
+if (navigator.maxTouchPoints > 0 && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && /^https:/.test(location.protocol)) $('#instHint').hidden = false;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#install').hidden = false; });
 addEventListener('appinstalled', () => { installEvt = null; $('#install').hidden = true; });
 $('#install').addEventListener('click', async () => {
@@ -1273,11 +1360,7 @@ $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'pace' 
 $('#spdMinus').addEventListener('click', () => changeSpeed(-10));
 $('#spdPlus').addEventListener('click', () => changeSpeed(10));
 $('#linesBtn').addEventListener('click', cycleLines);
-$('#mirrorBtn').addEventListener('click', () => {
-  cfg.mirror = !cfg.mirror; mirrorIn.checked = cfg.mirror; save();
-  document.body.classList.toggle('mirror', cfg.mirror);
-  setStat(cfg.mirror ? 'הטקסט הפוך (ראי)' : 'הטקסט רגיל', true);
-});
+
 $('#prevS').addEventListener('click', prevSentence);
 $('#nextS').addEventListener('click', nextSentence);
 $('#fsMinus').addEventListener('click', () => changeFs(-4));

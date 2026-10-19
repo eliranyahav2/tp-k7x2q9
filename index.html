@@ -83,6 +83,7 @@ input[type=range]{width:100%;height:32px;accent-color:var(--accent)}
 body.mirror #stage{transform:scaleX(-1)}
 #script{position:relative;width:var(--colwid);margin:0 auto;padding:var(--anchor) 0 75vh;text-align:center;font-size:var(--fs);line-height:1.55;font-weight:700;letter-spacing:0}
 #script p{margin:0 0 .7em}
+#script.sysfont{font-family:Arial,"Noto Sans Hebrew",sans-serif;font-weight:700}
 .w{padding:.02em .1em;margin-inline:-.1em;border-radius:.2em;transition:color .08s,background-color .08s}
 .w.done{color:var(--dim)}
 .w.cur{background:var(--accent);color:var(--on-accent)}
@@ -150,7 +151,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v19</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v20</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -212,6 +213,7 @@ details summary{color:var(--muted);cursor:pointer}
     <div class="status"><span id="dot"></span><span id="recTag" hidden></span><span id="stat"></span><span id="heard"></span></div>
     <div class="btns">
       <button class="btn primary" id="exit" type="button">סיום</button>
+      <button class="btn hot" id="renderBtn" type="button">תצוגה: רגילה</button>
       <button class="btn" id="fullBtn" type="button">מסך מלא</button>
       <button class="btn" id="pause" type="button">השהה</button>
       <button class="btn" id="modeBtn" type="button">מצב: קול</button>
@@ -252,7 +254,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v19';
+const APP_VER = 'v20';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -510,7 +512,23 @@ function calcPpw() {
   if (!(ppw > 1)) ppw = cfg.fs * 0.5;
 }
 
-function maxScroll() { return Math.max(0, stage.scrollHeight - stage.clientHeight); }
+function maxScroll() { return Math.max(0, scriptEl.offsetHeight - stage.clientHeight); }
+/* Some phones draw the big scrolling text upside down. Several ways to draw it; the reader picks the one that looks right. */
+const RENDER_NAMES = ['רגילה', 'חלופית 1', 'חלופית 2', 'חלופית 3'];
+function setY(y) {
+  const m = cfg.render || 0;
+  if (m === 0) { stage.scrollTop = y; return; }
+  if (stage.scrollTop) stage.scrollTop = 0;
+  if (m === 2) scriptEl.style.transform = 'translate3d(0,' + (-y).toFixed(1) + 'px,0)';
+  else scriptEl.style.top = (-Math.round(y)) + 'px';
+}
+function applyRender() {
+  const m = cfg.render || 0;
+  scriptEl.style.top = ''; scriptEl.style.transform = ''; stage.scrollTop = 0;
+  scriptEl.classList.toggle('sysfont', m === 3);
+  $('#renderBtn').textContent = 'תצוגה: ' + RENDER_NAMES[m];
+  setY(curY);
+}
 
 function aim(instant) {
   if (!words.length) return;
@@ -519,7 +537,7 @@ function aim(instant) {
   const s = scriptEl.getBoundingClientRect();
   const y = (r.top - s.top) + r.height / 2;
   target = clamp(y - tickY, 0, maxScroll());
-  if (instant) { curY = target; stage.scrollTop = curY; }
+  if (instant) { curY = target; setY(curY); }
 }
 
 // pos = last word matched by the recognizer; view() = what is shown as current.
@@ -600,7 +618,7 @@ function loop(t) {
   }
   const diff = target - curY;
   curY += Math.abs(diff) < 0.3 ? diff : diff * Math.min(1, dt * 16);
-  stage.scrollTop = curY;
+  setY(curY);
   raf = requestAnimationFrame(loop);
 }
 
@@ -1145,6 +1163,7 @@ async function openPrompter() {
   mode = cfg.mode === 'voice' && SR ? 'voice' : cfg.mode === 'pace' ? 'pace' : 'auto';
   wasTalking = false; voiceUntil = 0; noiseFloor = 0.02;
   srErrors = []; speechEvents = 0; fellBack = ''; showNote(''); resetSrWatch();
+  if (navigator.maxTouchPoints > 0 && !cfg.renderSeen) showNote('אם הטקסט מופיע הפוך, לחץ על "תצוגה" (הכפתור הצהוב) עד שהוא נראה רגיל. הבחירה נשמרת.');
   clearInterval(srWatch); srWatch = setInterval(checkSr, 1000);
   pos = 0; paintedPos = 0;
   document.body.classList.toggle('mirror', cfg.mirror);
@@ -1158,7 +1177,7 @@ async function openPrompter() {
   renderLinesBtn();
   applyLayout();
   paintAll();
-  stage.scrollTop = 0; curY = 0; target = 0;
+  curY = 0; target = 0; applyRender();
   requestAnimationFrame(() => { applyLayout(); aim(true); });
   lockScreen();
   wantFull = !!cfg.full && canFull;
@@ -1302,7 +1321,7 @@ async function buildReport() {
     try { const st = await navigator.permissions.query({ name: n }); L.push('perm.' + n + '=' + st.state); } catch (e) { L.push('perm.' + n + '=?'); }
   }
   try { const ds = await navigator.mediaDevices.enumerateDevices(); L.push('devices: video=' + ds.filter(d => d.kind === 'videoinput').length + ' audio=' + ds.filter(d => d.kind === 'audioinput').length); } catch (e) { L.push('devices=?'); }
-  L.push('cfg: mode=' + cfg.mode + ' record=' + cfg.record + ' audioOnly=' + !!cfg.audioOnly + ' burn=' + cfg.burn + ' orient=' + cfg.orient + ' qual=' + cfg.qual + ' mirror=' + cfg.mirror + ' preview=' + (cfg.preview !== false) + ' fade=' + cfg.fade + ' lines=' + cfg.lines + ' wpm=' + cfg.wpm + ' lang=' + cfg.lang);
+  L.push('cfg: mode=' + cfg.mode + ' record=' + cfg.record + ' audioOnly=' + !!cfg.audioOnly + ' burn=' + cfg.burn + ' orient=' + cfg.orient + ' qual=' + cfg.qual + ' mirror=' + cfg.mirror + ' render=' + (cfg.render || 0) + ' preview=' + (cfg.preview !== false) + ' fade=' + cfg.fade + ' lines=' + cfg.lines + ' wpm=' + cfg.wpm + ' lang=' + cfg.lang);
   L.push('last: camWhy=' + (camWhy || '-') + ' camNote=' + (camNote || '-') + ' recErrors=' + (recErrors.join('|') || '-') + ' srErrors=' + (srErrors.join('|') || '-') + ' speechEvents=' + speechEvents + ' peak=' + peak.toFixed(2) + ' fellBack=' + (fellBack || '-'));
   L.push('status=' + statEl.textContent);
   L.push(navigator.userAgent);
@@ -1370,6 +1389,12 @@ $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'pace' 
 $('#spdMinus').addEventListener('click', () => changeSpeed(-10));
 $('#spdPlus').addEventListener('click', () => changeSpeed(10));
 $('#linesBtn').addEventListener('click', cycleLines);
+$('#renderBtn').addEventListener('click', () => {
+  cfg.render = ((cfg.render || 0) + 1) % RENDER_NAMES.length; cfg.renderSeen = true; save();
+  if (!fellBack) showNote('');
+  applyRender();
+  setStat('תצוגה ' + RENDER_NAMES[cfg.render] + '. אם הטקסט עדיין הפוך, לחץ שוב.', true);
+});
 
 $('#prevS').addEventListener('click', prevSentence);
 $('#nextS').addEventListener('click', nextSentence);

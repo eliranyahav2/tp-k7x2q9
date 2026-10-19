@@ -86,12 +86,15 @@ body.mirror #stage{transform:scaleX(-1)}
 #script.sysfont{font-family:Arial,"Noto Sans Hebrew",sans-serif;font-weight:700}
 .w{padding:.02em .1em;margin-inline:-.1em;border-radius:.2em;transition:color .08s,background-color .08s}
 .w.done{color:var(--dim)}
-.w.cur{background:var(--accent);color:var(--on-accent)}
+.w.cur{color:var(--accent)}
+.wdot{position:absolute;left:0;top:0;width:.22em;height:.22em;border-radius:50%;background:var(--accent);box-shadow:0 0 .3em var(--accent);pointer-events:none;transition:left .16s ease-out,top .16s ease-out}
+#sentBox{position:absolute;top:var(--anchor);left:0;right:0;margin:0 auto;width:var(--colwid);text-align:center;font-size:var(--fs);line-height:1.5;font-weight:700}
+#sentBox .w{cursor:pointer}
 .tick{position:fixed;top:var(--tick);width:0;height:0;border-style:solid;transform:translateY(-50%);pointer-events:none}
 .tick.r{right:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 13px 9px 0;border-color:transparent var(--accent) transparent transparent}
 .tick.l{left:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 0 9px 13px;border-color:transparent transparent transparent var(--accent)}
 
-#bar{position:fixed;right:0;left:0;bottom:0;padding:26px 12px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,rgba(10,14,19,.98) 68%,rgba(10,14,19,0))}
+#bar{position:fixed;right:0;left:0;bottom:0;padding:16px 10px calc(8px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,rgba(10,14,19,.98) 68%,rgba(10,14,19,0))}
 .recfail.note{background:rgba(255,209,102,.12);border-color:var(--accent);color:var(--accent)}
 .recfail{background:rgba(255,155,138,.14);border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:.9rem;font-weight:600}
 .meter{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:10px}
@@ -102,7 +105,12 @@ body.mirror #stage{transform:scaleX(-1)}
 @keyframes pulse{50%{opacity:.35}}
 #stat{flex:none}
 #heard{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
-.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btns.main .btn{flex:1 1 0;min-height:42px;font-size:.9rem;padding:0 4px}
+.btns.more{margin-top:6px}
+.btns.more .btn{flex:1 1 22%;min-height:36px;font-size:.82rem}
+#bar .meter{margin-bottom:6px}
+#bar .status{margin-bottom:6px;min-height:18px}
 .btn{flex:1 1 22%;min-height:46px;padding:0 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:.95rem;cursor:pointer;white-space:nowrap}
 .btn:active{background:var(--line)}
 .btn.rec{border-color:var(--warn);color:var(--warn);font-weight:700}
@@ -151,7 +159,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v20</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v21</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -169,6 +177,8 @@ details summary{color:var(--muted);cursor:pointer}
       <div class="ctl" id="rowLead"><div class="row"><label for="lead" title="כמה מילים קדימה להציג, כדי לפצות על השהיית הזיהוי">תגובה</label></div>
         <select id="lead"><option value="0">מדויקת</option><option value="1">מהירה</option><option value="2">מהירה מאוד</option></select></div>
       <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
+      <div class="ctl" id="rowView"><div class="row"><label for="viewSel">תצוגת הטקסט</label></div>
+        <select id="viewSel"><option value="scroll">גלילה רציפה</option><option value="sent">משפט אחד ליד המצלמה</option></select></div>
       <div class="ctl" id="rowLines"><div class="row"><label for="linesSel" title="להציג רק את השורות הקרובות לעדשה">שורות מוצגות</label></div>
         <select id="linesSel"><option value="0">הכל</option><option value="1">שורה אחת</option><option value="2">שתי שורות</option><option value="3">שלוש שורות</option></select></div>
       <div class="ctl" id="rowOrient"><div class="row"><label for="orient" title="כיוון הסרטון שנשמר, בלי קשר לכיוון המסך">כיוון הסרטון</label></div>
@@ -204,6 +214,7 @@ details summary{color:var(--muted);cursor:pointer}
   <video id="cam" muted playsinline autoplay hidden></video>
   <div id="stage"><div id="script"></div></div>
   <div id="veil"></div>
+  <div id="sentBox" hidden></div>
   <i class="tick r"></i><i class="tick l"></i>
   <canvas id="out" hidden></canvas>
   <div id="bar">
@@ -211,16 +222,20 @@ details summary{color:var(--muted);cursor:pointer}
     <div class="recfail" id="recFail" role="alert" hidden></div>
     <div class="recfail note" id="note" role="status" hidden></div>
     <div class="status"><span id="dot"></span><span id="recTag" hidden></span><span id="stat"></span><span id="heard"></span></div>
-    <div class="btns">
+    <div class="btns main">
       <button class="btn primary" id="exit" type="button">סיום</button>
-      <button class="btn hot" id="renderBtn" type="button">תצוגה: רגילה</button>
-      <button class="btn" id="fullBtn" type="button">מסך מלא</button>
       <button class="btn" id="pause" type="button">השהה</button>
-      <button class="btn" id="modeBtn" type="button">מצב: קול</button>
-      <button class="btn" id="spdMinus" type="button" aria-label="גלילה איטית יותר">לאט −</button>
-      <button class="btn" id="spdPlus" type="button" aria-label="גלילה מהירה יותר">מהר +</button>
-      <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
+      <button class="btn" id="restart" type="button">התחל מחדש</button>
       <button class="btn rec" id="recBtn" type="button">● הקלט</button>
+      <button class="btn" id="moreBtn" type="button" aria-expanded="false">עוד ▴</button>
+    </div>
+    <div class="btns more" id="more" hidden>
+      <button class="btn" id="viewBtn" type="button">תצוגה: גלילה</button>
+      <button class="btn" id="modeBtn" type="button">מצב: קול</button>
+      <button class="btn" id="spdMinus" type="button" aria-label="איטי יותר">לאט −</button>
+      <button class="btn" id="spdPlus" type="button" aria-label="מהיר יותר">מהר +</button>
+      <button class="btn" id="linesBtn" type="button">שורות: הכל</button>
+      <button class="btn" id="fullBtn" type="button">מסך מלא</button>
       <button class="btn" id="prevS" type="button">משפט קודם</button>
       <button class="btn" id="nextS" type="button">משפט הבא</button>
       <button class="btn" id="fsMinus" type="button" aria-label="הקטן טקסט">A−</button>
@@ -254,7 +269,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v20';
+const APP_VER = 'v21';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -379,6 +394,9 @@ anchorIn.addEventListener('input', () => { cfg.anchor = +anchorIn.value; save();
 colwIn.addEventListener('input', () => { cfg.colw = +colwIn.value; save(); syncOutputs(); });
 fadeIn.addEventListener('change', () => { cfg.fade = fadeIn.checked; save(); });
 speedIn.addEventListener('input', () => { cfg.wpm = +speedIn.value; save(); syncOutputs(); });
+const viewSel = $('#viewSel');
+viewSel.value = cfg.view === 'sent' ? 'sent' : 'scroll';
+viewSel.addEventListener('change', () => { cfg.view = viewSel.value; save(); });
 const linesSel = $('#linesSel');
 linesSel.value = String(cfg.lines);
 linesSel.addEventListener('change', () => { cfg.lines = +linesSel.value; save(); });
@@ -483,6 +501,69 @@ function build() {
   });
   starts = [];
   words.forEach((w, i) => { if (i === 0 || w.para || words[i - 1].end) starts.push(i); });
+  // sentence view: whole sentences, long ones cut at a comma (or every 14 words)
+  segs = []; segOf = new Array(words.length);
+  starts.forEach((st, k) => {
+    const en = k + 1 < starts.length ? starts[k + 1] : words.length;
+    let a = st;
+    while (a < en) {
+      let b = Math.min(en, a + 14);
+      if (b < en) { for (let j = b - 1; j >= a + 5; j--) if (/[,;:]$/.test(words[j].raw)) { b = j + 1; break; } }
+      for (let j = a; j < b; j++) segOf[j] = segs.length;
+      segs.push([a, b]); a = b;
+    }
+  });
+  const lens = words.map(w => w.n.length);
+  avgLen = lens.length ? lens.reduce((x, y) => x + y, 0) / lens.length : 4;
+  dotEl = document.createElement('i'); dotEl.className = 'wdot'; scriptEl.appendChild(dotEl);
+  shownSeg = -1;
+}
+let segs = [], segOf = [], avgLen = 4, dotEl = null, sentDot = null, shownSeg = -1, clockFrac = 0;
+const sentBox = $('#sentBox');
+function isSent() { return cfg.view === 'sent'; }
+function renderSent() {
+  if (!isSent() || !words.length) return;
+  const v = clamp(view(), 0, words.length - 1), k = segOf[v];
+  if (k !== shownSeg) {
+    shownSeg = k;
+    sentBox.textContent = '';
+    for (let i = segs[k][0]; i < segs[k][1]; i++) {
+      const sp = document.createElement('span');
+      sp.className = 'w'; sp.textContent = words[i].raw; sp.dataset.i = String(i);
+      sentBox.appendChild(sp); sentBox.appendChild(document.createTextNode(' '));
+    }
+    sentDot = document.createElement('i'); sentDot.className = 'wdot'; sentBox.appendChild(sentDot);
+  }
+  const vv = view();
+  sentBox.querySelectorAll('.w').forEach(sp => { const i = +sp.dataset.i; sp.classList.toggle('done', i < vv); sp.classList.toggle('cur', i === vv); });
+}
+function placeDot() {
+  const sent = isSent();
+  const d = sent ? sentDot : dotEl;
+  if (!d || !words.length) return;
+  const v = clamp(view(), 0, words.length - 1);
+  const el = sent ? sentBox.querySelector('.w[data-i="' + v + '"]') : words[v].el;
+  if (!el) return;
+  d.style.left = (el.offsetLeft + el.offsetWidth / 2 - d.offsetWidth / 2) + 'px';
+  d.style.top = (el.offsetTop + el.offsetHeight + 2) + 'px';
+}
+function applyView() {
+  const sent = isSent();
+  stage.style.visibility = sent ? 'hidden' : '';
+  $('#veil').hidden = sent;
+  document.querySelectorAll('.tick').forEach(t => { t.style.display = sent ? 'none' : ''; });
+  sentBox.hidden = !sent;
+  shownSeg = -1;
+  renderSent();
+  placeDot();
+  $('#viewBtn').textContent = sent ? 'תצוגה: משפט' : 'תצוגה: גלילה';
+}
+// time a word takes in auto/pace modes: longer words and sentence ends take longer
+function wordTime(i) {
+  const w = words[i];
+  let x = 0.55 + 0.45 * Math.min(2.2, w.n.length / avgLen);
+  if (w.end) x += 0.7; else if (/[,;:]$/.test(w.raw)) x += 0.35;
+  return x;
 }
 
 function applyLayout() {
@@ -502,6 +583,7 @@ function applyLayout() {
     veil = 'linear-gradient(to bottom,' + B + ' 0,' + B + ' ' + top + 'px,' + T + ' ' + (top + Math.round(lh * 0.12)) + 'px,' + T + ' ' + (bot - Math.round(lh * 0.1)) + 'px,' + B + ' ' + bot + 'px)';
   }
   prompter.style.setProperty('--veil', veil);
+  requestAnimationFrame(placeDot);
   ppwDirty = true;
 }
 let ppwDirty = true, ppw = 0;
@@ -526,7 +608,6 @@ function applyRender() {
   const m = cfg.render || 0;
   scriptEl.style.top = ''; scriptEl.style.transform = ''; stage.scrollTop = 0;
   scriptEl.classList.toggle('sysfont', m === 3);
-  $('#renderBtn').textContent = 'תצוגה: ' + RENDER_NAMES[m];
   setY(curY);
 }
 
@@ -551,6 +632,7 @@ function paintAll() {
   });
   paintedPos = v;
   updateProgress();
+  renderSent(); placeDot();
 }
 function paint() {
   const v = view();
@@ -561,6 +643,7 @@ function paint() {
   }
   paintedPos = v;
   updateProgress();
+  renderSent(); placeDot();
 }
 function updateProgress() {
   $('#progress').style.width = (words.length ? view() / words.length * 100 : 0) + '%';
@@ -572,7 +655,7 @@ function setPos(p) {
   if (view() >= words.length && mode === 'voice') setStat('סוף הטקסט', false);
 }
 function jumpTo(p) {
-  lastSync = Date.now();
+  lastSync = Date.now(); clockFrac = 0;
   setPos(p - (mode === 'voice' ? cfg.lead : 0));
   if (mode === 'voice' && !paused) { stopRec(); startRec(); }
 }
@@ -611,10 +694,13 @@ function loop(t) {
     const talking = t < voiceUntil;
     if (talking !== wasTalking && !paused && started) { wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); }
   }
-  if ((mode === 'auto' || mode === 'pace') && !paused && started && (mode === 'auto' || t < voiceUntil)) {
-    if (ppwDirty) calcPpw();
-    target = Math.min(maxScroll(), target + cfg.wpm / 60 * ppw * dt);
-    if (target >= maxScroll() - 0.5) setStat('סוף הטקסט', false);
+  if ((mode === 'auto' || mode === 'pace') && !paused && started && pos < words.length && (mode === 'auto' || t < voiceUntil)) {
+    clockFrac += dt * cfg.wpm / 60 / wordTime(pos);
+    if (clockFrac >= 1) {
+      clockFrac = 0;
+      setPos(pos + 1);
+      if (pos >= words.length) setStat('סוף הטקסט', false);
+    }
   }
   const diff = target - curY;
   curY += Math.abs(diff) < 0.3 ? diff : diff * Math.min(1, dt * 16);
@@ -828,12 +914,13 @@ function setMode(m) {
   renderModeBtn();
   if (m === 'voice') {
     resetSrWatch(); showNote('');
-    if (was !== 'voice') { pos = Math.max(0, posFromScroll() - cfg.lead); paintAll(); }
+    if (was !== 'voice') { pos = Math.max(0, pos - cfg.lead); paintAll(); }
     lastSync = Date.now();
     aim(false);
     if (!paused) startRec(); else setStat('מושהה', false);
   } else {
-    target = curY;
+    if (was === 'voice') { pos = view(); paintAll(); }
+    clockFrac = 0; aim(false);
     setStat(paused ? 'מושהה' : m === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית', !paused);
   }
 }
@@ -961,10 +1048,7 @@ function buildCaps() {
   }
 }
 function captionWord() {
-  if (mode === 'voice') return clamp(view(), 0, words.length - 1);
-  const t = performance.now();
-  if (t - capIdxT > 150) { capIdxT = t; capIdx = clamp(posFromScroll(), 0, words.length - 1); }
-  return capIdx;
+  return clamp(view(), 0, words.length - 1);
 }
 function rr(c, x, y, w, h, r) {
   c.beginPath();
@@ -1085,6 +1169,27 @@ async function recordNow() {
   recBusy = false; syncRecBtn();
   if (running && wasVoice && !paused) startRec();
 }
+async function restartTake() {
+  if (!running || recBusy) return;
+  const wasRec = recording;
+  stopRec();
+  pos = 0; clockFrac = 0; lastSync = Date.now();
+  paintAll(); aim(true);
+  if (wasRec) {
+    recBusy = true; syncRecBtn(); started = false;
+    clearInterval(recTimer);
+    if (mr && mr.state !== 'inactive') { mr.ondataavailable = null; mr.onstop = null; try { mr.stop(); } catch (e) {} }
+    mr = null; chunks = []; recording = false;
+    $('#recTag').hidden = true; $('#exit').textContent = 'סיום';
+    for (let n = 3; n > 0 && running; n--) { setStat('הקלטה חדשה בעוד ' + n + '…', false); await sleep(1000); }
+    if (!running) { recBusy = false; return; }
+    if (!beginRecording()) showRecFail(true);
+    recBusy = false; syncRecBtn(); started = true;
+  }
+  paused = false; $('#pause').textContent = 'השהה';
+  if (mode === 'voice') { resetSrWatch(); startRec(); }
+  else setStat(mode === 'pace' ? 'התחל לדבר…' : 'גלילה אוטומטית', true);
+}
 function stopCamera() {
   clearInterval(recTimer);
   $('#recTag').hidden = true;
@@ -1163,7 +1268,8 @@ async function openPrompter() {
   mode = cfg.mode === 'voice' && SR ? 'voice' : cfg.mode === 'pace' ? 'pace' : 'auto';
   wasTalking = false; voiceUntil = 0; noiseFloor = 0.02;
   srErrors = []; speechEvents = 0; fellBack = ''; showNote(''); resetSrWatch();
-  if (navigator.maxTouchPoints > 0 && !cfg.renderSeen) showNote('אם הטקסט מופיע הפוך, לחץ על "תצוגה" (הכפתור הצהוב) עד שהוא נראה רגיל. הבחירה נשמרת.');
+  cfg.render = 0; clockFrac = 0;
+  $('#more').hidden = true; $('#moreBtn').textContent = 'עוד ▴';
   clearInterval(srWatch); srWatch = setInterval(checkSr, 1000);
   pos = 0; paintedPos = 0;
   document.body.classList.toggle('mirror', cfg.mirror);
@@ -1177,7 +1283,7 @@ async function openPrompter() {
   renderLinesBtn();
   applyLayout();
   paintAll();
-  curY = 0; target = 0; applyRender();
+  curY = 0; target = 0; applyRender(); applyView();
   requestAnimationFrame(() => { applyLayout(); aim(true); });
   lockScreen();
   wantFull = !!cfg.full && canFull;
@@ -1389,12 +1495,14 @@ $('#modeBtn').addEventListener('click', () => setMode(mode === 'voice' ? 'pace' 
 $('#spdMinus').addEventListener('click', () => changeSpeed(-10));
 $('#spdPlus').addEventListener('click', () => changeSpeed(10));
 $('#linesBtn').addEventListener('click', cycleLines);
-$('#renderBtn').addEventListener('click', () => {
-  cfg.render = ((cfg.render || 0) + 1) % RENDER_NAMES.length; cfg.renderSeen = true; save();
-  if (!fellBack) showNote('');
-  applyRender();
-  setStat('תצוגה ' + RENDER_NAMES[cfg.render] + '. אם הטקסט עדיין הפוך, לחץ שוב.', true);
+$('#viewBtn').addEventListener('click', () => { cfg.view = isSent() ? 'scroll' : 'sent'; viewSel.value = cfg.view; save(); applyView(); aim(true); });
+$('#moreBtn').addEventListener('click', () => {
+  const m = $('#more'); m.hidden = !m.hidden;
+  $('#moreBtn').textContent = m.hidden ? 'עוד ▴' : 'פחות ▾';
+  $('#moreBtn').setAttribute('aria-expanded', String(!m.hidden));
+  applyLayout(); aim(false);
 });
+$('#restart').addEventListener('click', restartTake);
 
 $('#prevS').addEventListener('click', prevSentence);
 $('#nextS').addEventListener('click', nextSentence);
@@ -1404,11 +1512,13 @@ $('#colMinus').addEventListener('click', () => changeCol(-4));
 $('#colPlus').addEventListener('click', () => changeCol(4));
 $('#lineUp').addEventListener('click', () => changeAnchor(-1));
 $('#lineDown').addEventListener('click', () => changeAnchor(1));
-stage.addEventListener('click', e => {
-  if (mode !== 'voice') { setPaused(!paused); return; }
+function onTextTap(e) {
   const w = e.target.closest('.w');
-  if (w) jumpTo(+w.dataset.i);
-});
+  if (w) { jumpTo(+w.dataset.i); return; }
+  if (mode !== 'voice') setPaused(!paused);
+}
+stage.addEventListener('click', onTextTap);
+sentBox.addEventListener('click', onTextTap);
 addEventListener('resize', () => { if (running) { applyLayout(); aim(true); } });
 addEventListener('keydown', e => {
   if (!running) return;

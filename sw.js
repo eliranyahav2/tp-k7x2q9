@@ -1,5 +1,5 @@
 // Network first for the page itself, so updates arrive; cached copy when offline.
-const CACHE = 'tp-v20';
+const CACHE = 'tp-v21';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {

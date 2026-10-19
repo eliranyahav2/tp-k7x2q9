@@ -164,7 +164,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v22</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v23</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -185,6 +185,7 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="sens"><option value="high">גבוהה (חדר שקט)</option><option value="mid">רגילה</option><option value="low">נמוכה (רעש ברקע)</option></select></div>
       <div class="ctl" id="rowHold"><div class="row"><label for="hold">עצירה אחרי שתיקה של</label></div>
         <select id="hold"><option value="200">0.2 שניות (מהיר)</option><option value="350">0.35 שניות</option><option value="600">0.6 שניות (רגוע)</option></select></div>
+      <div class="ctl" id="rowAdapt"><label class="check"><input type="checkbox" id="adapt"> להתאים מהירות לקצב הדיבור (לפי הברות)</label></div>
       <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
       <div class="ctl" id="rowView"><div class="row"><label for="viewSel">תצוגת הטקסט</label></div>
         <select id="viewSel"><option value="scroll">גלילה רציפה</option><option value="sent">משפט אחד ליד המצלמה</option></select></div>
@@ -279,7 +280,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v22';
+const APP_VER = 'v23';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -386,12 +387,12 @@ function syncOutputs() {
 }
 function applyModeUI() {
   $('#modeHint').textContent = cfg.mode === 'voice' ? 'הטקסט עוקב אחרי המילים שאתה אומר. עובד טוב במחשב. אם בטלפון זה לא עובד, הכלי עובר לבד ל"קצב לפי הקול".'
-    : cfg.mode === 'pace' ? 'הטקסט זז רק כשאתה מדבר ונעצר כשאתה שותק. עובד בטלפון גם בזמן הקלטת וידאו. המהירות נקבעת למטה.'
+    : cfg.mode === 'pace' ? 'הטקסט זז רק כשאתה מדבר ונעצר כשאתה שותק. עובד בטלפון גם בזמן הקלטת וידאו. המהירות למטה היא הקצב הרגיל שלך; עם התאמה להברות הטקסט מאיץ כשאתה מדבר מהר ומאט כשאתה מדבר לאט.'
     : 'הטקסט זז במהירות קבועה. הקשה על הטקסט עוצרת וממשיכה.';
   $('#rowLang').hidden = cfg.mode !== 'voice';
   $('#rowLead').hidden = cfg.mode !== 'voice';
   $('#rowSpeed').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
-  $('#rowSens').hidden = $('#rowHold').hidden = cfg.mode !== 'pace';
+  $('#rowSens').hidden = $('#rowHold').hidden = $('#rowAdapt').hidden = cfg.mode !== 'pace';
 }
 text.value = cfg.text;
 const colwIn = $('#colw'), fadeIn = $('#fade');
@@ -409,6 +410,9 @@ const sensSel = $('#sens'), holdSel = $('#hold');
 sensSel.value = cfg.sens || 'mid'; holdSel.value = String(cfg.hold || 350);
 sensSel.addEventListener('change', () => { cfg.sens = sensSel.value; save(); });
 holdSel.addEventListener('change', () => { cfg.hold = +holdSel.value; save(); });
+const adaptIn = $('#adapt');
+adaptIn.checked = cfg.adapt !== false;
+adaptIn.addEventListener('change', () => { cfg.adapt = adaptIn.checked; save(); });
 const viewSel = $('#viewSel');
 viewSel.value = cfg.view === 'sent' ? 'sent' : 'scroll';
 viewSel.addEventListener('change', () => { cfg.view = viewSel.value; save(); });
@@ -741,10 +745,15 @@ function loop(t) {
   }
   if (mode === 'pace' && analyser) {
     const talking = t < voiceUntil;
-    if (talking !== wasTalking && !paused && started) { wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); }
+    if (cfg.adapt !== false) sylStep(t, talking); else paceMul = 1;
+    if (talking !== wasTalking && !paused && started) { wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); mulShownT = 0; }
+    if (talking && !paused && started && cfg.adapt !== false && t - mulShownT > 600) {
+      mulShownT = t;
+      setStat('מדבר… קצב ' + (paceMul > 1.08 ? 'מהיר' : paceMul < 0.92 ? 'איטי' : 'רגיל') + ' ×' + paceMul.toFixed(1), true);
+    }
   }
   if ((mode === 'auto' || mode === 'pace') && !paused && started && pos < words.length && (mode === 'auto' || t < voiceUntil)) {
-    clockFrac += dt * cfg.wpm / 60 / wordTime(pos);
+    clockFrac += dt * cfg.wpm / 60 * (mode === 'pace' ? paceMul : 1) / wordTime(pos);
     if (clockFrac >= 1) {
       clockFrac = 0;
       setPos(pos + 1);
@@ -755,6 +764,46 @@ function loop(t) {
   curY += Math.abs(diff) < 0.3 ? diff : diff * Math.min(1, dt * 16);
   setY(curY);
   raf = requestAnimationFrame(loop);
+}
+
+/* speaking rate from syllables: each syllable is a bump in the speech-band loudness.
+   The rate is compared with the speaker's own running average, so the speed setting stays
+   "my normal pace" and the text speeds up or slows down around it. */
+let fbuf = null, sylE = 0, sylMax = 0, sylMin = 0, sylValley = 0, sylUp = true, sylPeakT = 0, sylLastT = 0, sylN = 0;
+let rateFast = 0, rateSlow = 0, paceMul = 1, mulShownT = 0;
+function resetSyl() { sylE = sylMax = sylMin = sylValley = 0; sylUp = true; sylPeakT = sylLastT = 0; sylN = 0; rateFast = rateSlow = 0; paceMul = 1; }
+function sylStep(t, talking) {
+  if (!fbuf || fbuf.length !== analyser.frequencyBinCount) fbuf = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(fbuf);
+  const hz = (analyser.context.sampleRate || 48000) / analyser.fftSize;
+  const a = Math.max(1, Math.round(300 / hz)), b = Math.min(fbuf.length - 1, Math.round(2500 / hz));
+  let sum = 0;
+  for (let i = a; i <= b; i++) sum += fbuf[i];
+  const e = sum / (b - a + 1);
+  sylE = sylE ? sylE * 0.55 + e * 0.45 : e;
+  const PROM = 5;
+  if (sylUp) {
+    if (sylE > sylMax) { sylMax = sylE; sylPeakT = t; }
+    if (sylE < sylMax - PROM) {
+      if (talking && sylMax - sylValley >= PROM && sylPeakT - sylLastT > 90) onSyllable(sylPeakT);
+      sylUp = false; sylMin = sylE;
+    }
+  } else {
+    if (sylE < sylMin) sylMin = sylE;
+    if (sylE > sylMin + PROM) { sylValley = sylMin; sylUp = true; sylMax = sylE; sylPeakT = t; }
+  }
+}
+function onSyllable(t) {
+  const gap = t - sylLastT;
+  sylLastT = t;
+  if (gap <= 0 || gap > 650) return;              // first syllable after a pause carries no rate
+  const r = 1000 / gap;
+  sylN++;
+  if (sylN === 1) { rateFast = rateSlow = r; return; }
+  rateFast += (r - rateFast) * 0.18;
+  rateSlow += (r - rateSlow) * (sylN < 25 ? 0.08 : 0.012);
+  const m = sylN < 8 ? 1 : clamp(rateFast / rateSlow, 0.6, 1.6);
+  paceMul += (m - paceMul) * 0.5;
 }
 
 /* pace mode: scroll only while the mic hears speech (works together with recording) */
@@ -955,7 +1004,7 @@ function cycleLines() {
 function setMode(m) {
   if (m === 'voice' && !SR) { setStat('אין תמיכה בזיהוי דיבור בדפדפן הזה.', false); return; }
   stopRec();
-  if (m === 'pace') { wasTalking = false; voiceUntil = 0; ensurePaceMeter(); }
+  if (m === 'pace') { wasTalking = false; voiceUntil = 0; resetSyl(); ensurePaceMeter(); }
   const was = mode;
   mode = m;
   cfg.mode = m;
@@ -1327,7 +1376,7 @@ async function openPrompter() {
   if (!words.length) { errEl.textContent = 'הדבק קודם טקסט להקראה.'; errEl.hidden = false; return; }
   running = true; paused = false; fatal = false;
   mode = cfg.mode === 'voice' && SR ? 'voice' : cfg.mode === 'pace' ? 'pace' : 'auto';
-  wasTalking = false; voiceUntil = 0; noiseFloor = 0.02;
+  wasTalking = false; voiceUntil = 0; noiseFloor = 0.02; resetSyl();
   srErrors = []; speechEvents = 0; fellBack = ''; showNote(''); resetSrWatch();
   cfg.render = 0; clockFrac = 0;
   $('#more').hidden = true; $('#moreBtn').textContent = 'עוד ▴';

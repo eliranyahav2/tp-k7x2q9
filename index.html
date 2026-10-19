@@ -15,7 +15,7 @@
 <title>טלפרומפטר קולי</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@500;700&display=swap" rel="stylesheet">
 <style>
 /* Layout: a setup sheet (script + settings) that opens into a full-screen reading stage.
    The active line is pinned to a fixed eye-line near the front camera; the script moves under it. */
@@ -87,9 +87,14 @@ body.mirror #stage{transform:scaleX(-1)}
 .w{padding:.02em .1em;margin-inline:-.1em;border-radius:.2em;transition:color .08s,background-color .08s}
 .w.done{color:var(--dim)}
 .w.cur{color:var(--accent)}
+#script.nq,#sentBox.nq{font-family:"Noto Sans Hebrew","Heebo",Arial,sans-serif;line-height:1.85}
 .wdot{position:absolute;left:0;top:0;width:.22em;height:.22em;border-radius:50%;background:var(--accent);box-shadow:0 0 .3em var(--accent);pointer-events:none;transition:left .16s ease-out,top .16s ease-out}
 #sentBox{position:absolute;top:var(--anchor);left:0;right:0;margin:0 auto;width:var(--colwid);text-align:center;font-size:var(--fs);line-height:1.5;font-weight:700}
 #sentBox .w{cursor:pointer}
+#countdown{position:fixed;top:0;right:0;bottom:0;left:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(10,14,19,.72);pointer-events:none}
+#countdown b{font-size:min(55vw,55vh);line-height:1;font-weight:800;color:var(--accent);animation:cdpop 1s ease-out both}
+#countdown small{font-size:1.2rem;color:var(--fg);font-weight:600}
+@keyframes cdpop{0%{transform:scale(.55);opacity:0}25%{transform:scale(1);opacity:1}85%{opacity:1}100%{opacity:.15}}
 .tick{position:fixed;top:var(--tick);width:0;height:0;border-style:solid;transform:translateY(-50%);pointer-events:none}
 .tick.r{right:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 13px 9px 0;border-color:transparent var(--accent) transparent transparent}
 .tick.l{left:calc(50% - var(--colwid) / 2 - 18px);border-width:9px 0 9px 13px;border-color:transparent transparent transparent var(--accent)}
@@ -159,7 +164,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v21</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v22</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -176,6 +181,10 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="lang"><option value="he-IL">עברית</option><option value="en-US">English</option></select></div>
       <div class="ctl" id="rowLead"><div class="row"><label for="lead" title="כמה מילים קדימה להציג, כדי לפצות על השהיית הזיהוי">תגובה</label></div>
         <select id="lead"><option value="0">מדויקת</option><option value="1">מהירה</option><option value="2">מהירה מאוד</option></select></div>
+      <div class="ctl" id="rowSens"><div class="row"><label for="sens">רגישות לקול</label></div>
+        <select id="sens"><option value="high">גבוהה (חדר שקט)</option><option value="mid">רגילה</option><option value="low">נמוכה (רעש ברקע)</option></select></div>
+      <div class="ctl" id="rowHold"><div class="row"><label for="hold">עצירה אחרי שתיקה של</label></div>
+        <select id="hold"><option value="200">0.2 שניות (מהיר)</option><option value="350">0.35 שניות</option><option value="600">0.6 שניות (רגוע)</option></select></div>
       <div class="ctl" id="rowSpeed"><div class="row"><label for="speed">מהירות גלילה</label><output id="speedOut"></output></div><input type="range" id="speed" min="40" max="300" step="10"></div>
       <div class="ctl" id="rowView"><div class="row"><label for="viewSel">תצוגת הטקסט</label></div>
         <select id="viewSel"><option value="scroll">גלילה רציפה</option><option value="sent">משפט אחד ליד המצלמה</option></select></div>
@@ -215,6 +224,7 @@ details summary{color:var(--muted);cursor:pointer}
   <div id="stage"><div id="script"></div></div>
   <div id="veil"></div>
   <div id="sentBox" hidden></div>
+  <div id="countdown" hidden></div>
   <i class="tick r"></i><i class="tick l"></i>
   <canvas id="out" hidden></canvas>
   <div id="bar">
@@ -269,7 +279,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v21';
+const APP_VER = 'v22';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -381,6 +391,7 @@ function applyModeUI() {
   $('#rowLang').hidden = cfg.mode !== 'voice';
   $('#rowLead').hidden = cfg.mode !== 'voice';
   $('#rowSpeed').hidden = cfg.mode !== 'auto' && cfg.mode !== 'pace';
+  $('#rowSens').hidden = $('#rowHold').hidden = cfg.mode !== 'pace';
 }
 text.value = cfg.text;
 const colwIn = $('#colw'), fadeIn = $('#fade');
@@ -394,6 +405,10 @@ anchorIn.addEventListener('input', () => { cfg.anchor = +anchorIn.value; save();
 colwIn.addEventListener('input', () => { cfg.colw = +colwIn.value; save(); syncOutputs(); });
 fadeIn.addEventListener('change', () => { cfg.fade = fadeIn.checked; save(); });
 speedIn.addEventListener('input', () => { cfg.wpm = +speedIn.value; save(); syncOutputs(); });
+const sensSel = $('#sens'), holdSel = $('#hold');
+sensSel.value = cfg.sens || 'mid'; holdSel.value = String(cfg.hold || 350);
+sensSel.addEventListener('change', () => { cfg.sens = sensSel.value; save(); });
+holdSel.addEventListener('change', () => { cfg.hold = +holdSel.value; save(); });
 const viewSel = $('#viewSel');
 viewSel.value = cfg.view === 'sent' ? 'sent' : 'scroll';
 viewSel.addEventListener('change', () => { cfg.view = viewSel.value; save(); });
@@ -472,7 +487,7 @@ if (!SR) {
 }
 
 /* ============ prompter ============ */
-const prompter = $('#prompter'), stage = $('#stage'), scriptEl = $('#script');
+const prompter = $('#prompter'), stage = $('#stage'), scriptEl = $('#script'), sentBox = $('#sentBox');
 const dot = $('#dot'), statEl = $('#stat'), heardEl = $('#heard');
 let words = [], starts = [];
 let pos = 0, paintedPos = 0;
@@ -482,6 +497,8 @@ let target = 0, curY = 0, tickY = 120, raf = 0, lastT = 0, lastSync = 0;
 function build() {
   scriptEl.textContent = '';
   words = [];
+  hasNq = /[\u0591-\u05C7]/.test(cfg.text);
+  scriptEl.classList.toggle('nq', hasNq); sentBox.classList.toggle('nq', hasNq);
   cfg.text.split(/\n+/).map(s => s.trim()).filter(Boolean).forEach(line => {
     const p = document.createElement('p');
     let first = true;
@@ -518,8 +535,8 @@ function build() {
   dotEl = document.createElement('i'); dotEl.className = 'wdot'; scriptEl.appendChild(dotEl);
   shownSeg = -1;
 }
-let segs = [], segOf = [], avgLen = 4, dotEl = null, sentDot = null, shownSeg = -1, clockFrac = 0;
-const sentBox = $('#sentBox');
+let segs = [], segOf = [], avgLen = 4, dotEl = null, sentDot = null, shownSeg = -1, clockFrac = 0, hasNq = false;
+let lineTops = [], lineOf = [], linesDirty = true, pageStart = -1;
 function isSent() { return cfg.view === 'sent'; }
 function renderSent() {
   if (!isSent() || !words.length) return;
@@ -544,8 +561,12 @@ function placeDot() {
   const v = clamp(view(), 0, words.length - 1);
   const el = sent ? sentBox.querySelector('.w[data-i="' + v + '"]') : words[v].el;
   if (!el) return;
+  const ny = el.offsetTop + el.offsetHeight + (hasNq ? d.offsetHeight * 1.2 : 2);
+  const jump = Math.abs(ny - (parseFloat(d.style.top) || 0)) > 4;   // new line: jump, don't slide across the text
+  if (jump) d.style.transition = 'none';
   d.style.left = (el.offsetLeft + el.offsetWidth / 2 - d.offsetWidth / 2) + 'px';
-  d.style.top = (el.offsetTop + el.offsetHeight + 2) + 'px';
+  d.style.top = ny + 'px';
+  if (jump) { void d.offsetWidth; d.style.transition = ''; }
 }
 function applyView() {
   const sent = isSent();
@@ -568,18 +589,19 @@ function wordTime(i) {
 
 function applyLayout() {
   const anchor = Math.round(innerHeight * cfg.anchor / 100);
-  tickY = anchor + cfg.fs * 1.55 / 2;
+  tickY = anchor + cfg.fs * (hasNq ? 1.85 : 1.55) / 2;
   prompter.style.setProperty('--fs', cfg.fs + 'px');
   const barEl = $('#bar'); if (barEl) prompter.style.setProperty('--barh', (barEl.offsetHeight + 8) + 'px');
   prompter.style.setProperty('--anchor', anchor + 'px');
   prompter.style.setProperty('--tick', tickY + 'px');
   prompter.style.setProperty('--colwid', 'min(calc(100vw - 24px), max(260px, ' + colw() + 'vw))');
-  const lh = cfg.fs * 1.55;
+  const lh = cfg.fs * (hasNq ? 1.85 : 1.55);
   const B = 'var(--bg)', T = 'rgba(10,14,19,0)';
   let veil = cfg.fade ? 'linear-gradient(to bottom,' + T + ' 0,' + T + ' ' + Math.round(tickY + lh * 2.2) + 'px,' + B + ' ' + Math.round(tickY + lh * 4.2) + 'px)' : 'none';
+  linesDirty = true; pageStart = -1;
   if (cfg.lines > 0) {
-    // show only the current line and the next ones, nothing above the eye line
-    const top = Math.round(tickY - lh * 0.62), bot = Math.round(tickY + lh * (cfg.lines - 0.5) + lh * 0.12);
+    // show exactly the lines of the current page, nothing above the eye line
+    const top = Math.round(tickY - lh * 0.62), bot = Math.round(tickY + pageSpan(lh) + lh * 0.62);
     veil = 'linear-gradient(to bottom,' + B + ' 0,' + B + ' ' + top + 'px,' + T + ' ' + (top + Math.round(lh * 0.12)) + 'px,' + T + ' ' + (bot - Math.round(lh * 0.1)) + 'px,' + B + ' ' + bot + 'px)';
   }
   prompter.style.setProperty('--veil', veil);
@@ -611,8 +633,34 @@ function applyRender() {
   setY(curY);
 }
 
+function calcLines() {
+  linesDirty = false;
+  const tops = [...new Set(words.map(w => w.el.offsetTop))].sort((a, b) => a - b);
+  lineTops = [];
+  tops.forEach(t => { if (!lineTops.length || t - lineTops[lineTops.length - 1] > 4) lineTops.push(t); });
+  lineOf = words.map(w => { let k = 0; while (k + 1 < lineTops.length && lineTops[k + 1] <= w.el.offsetTop + 4) k++; return k; });
+}
+function pageSpan(lh) {
+  if (pageStart < 0 || !lineTops.length) return lh * (cfg.lines - 1);
+  const last = Math.min(lineTops.length - 1, pageStart + cfg.lines - 1);
+  return lineTops[last] - lineTops[pageStart];
+}
 function aim(instant) {
   if (!words.length) return;
+  if (cfg.lines > 0 && !isSent()) {
+    if (linesDirty) calcLines();
+    const li = lineOf[Math.min(view(), words.length - 1)] || 0;
+    if (pageStart < 0 || li < pageStart || li >= pageStart + cfg.lines) {
+      pageStart = li;
+      const lh = cfg.fs * (hasNq ? 1.85 : 1.55), B = 'var(--bg)', T = 'rgba(10,14,19,0)';
+      const top = Math.round(tickY - lh * 0.62), bot = Math.round(tickY + pageSpan(lh) + lh * 0.62);
+      prompter.style.setProperty('--veil', 'linear-gradient(to bottom,' + B + ' 0,' + B + ' ' + top + 'px,' + T + ' ' + (top + 2) + 'px,' + T + ' ' + (bot - 2) + 'px,' + B + ' ' + bot + 'px)');
+    }
+    const w0 = words[lineOf.indexOf(pageStart)] || words[0];
+    target = clamp(w0.el.offsetTop + w0.el.offsetHeight / 2 - tickY, 0, maxScroll());
+    curY = target; setY(curY);
+    return;
+  }
   const w = words[Math.min(view(), words.length - 1)];
   const r = w.el.getBoundingClientRect();
   const s = scriptEl.getBoundingClientRect();
@@ -686,8 +734,9 @@ function loop(t) {
   }
   if (useCv && outCtx && camStream) drawOut();
   if (analyser) {
-    if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.002;
-    if (lvl > noiseFloor + 0.05) voiceUntil = t + 700;
+    if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.0007;
+    const thr = cfg.sens === 'high' ? 0.022 : cfg.sens === 'low' ? 0.08 : 0.04;
+    if (lvl > noiseFloor + Math.max(thr, noiseFloor)) voiceUntil = t + (cfg.hold || 350);
     if (mode === 'voice' && running && !paused && t < voiceUntil) talkMs += dt * 1000;
   }
   if (mode === 'pace' && analyser) {
@@ -901,7 +950,7 @@ function cycleLines() {
   cfg.lines = (cfg.lines + 1) % 4;
   linesSel.value = String(cfg.lines);
   save(); renderLinesBtn();
-  applyLayout();
+  applyLayout(); aim(true);
 }
 function setMode(m) {
   if (m === 'voice' && !SR) { setStat('אין תמיכה בזיהוי דיבור בדפדפן הזה.', false); return; }
@@ -949,6 +998,18 @@ function camText(nm) {
 let burn = false, useCv = false, burnUsed = false, outCtx = null, capChunks = [], capOf = [], capIdx = 0, capIdxT = 0, recBusy = false;
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function countdown(label) {
+  const el = $('#countdown');
+  for (let n = 3; n > 0 && running; n--) {
+    el.innerHTML = '';
+    const b = document.createElement('b'); b.textContent = String(n);
+    const sm = document.createElement('small'); sm.textContent = label;
+    el.appendChild(b); el.appendChild(sm); el.hidden = false;
+    setStat(label + ' ' + n + '…', false);
+    await sleep(1000);
+  }
+  el.hidden = true;
+}
 
 async function startCamera() {
   stopPaceMeter();
@@ -1162,7 +1223,7 @@ async function recordNow() {
   if (!running) { if (ok) stopCamera(); recBusy = false; return; }
   let failed = !ok;
   if (ok) {
-    for (let n = 3; n > 0 && running; n--) { setStat('מקליטים בעוד ' + n + '…' + orientHint(), false); await sleep(1000); }
+    await countdown('מקליטים בעוד' + orientHint());
     if (running && !beginRecording()) failed = true;
   }
   if (failed) { setStat('אי אפשר להקליט.', false); showRecFail(true); await sleep(1500); }
@@ -1181,7 +1242,7 @@ async function restartTake() {
     if (mr && mr.state !== 'inactive') { mr.ondataavailable = null; mr.onstop = null; try { mr.stop(); } catch (e) {} }
     mr = null; chunks = []; recording = false;
     $('#recTag').hidden = true; $('#exit').textContent = 'סיום';
-    for (let n = 3; n > 0 && running; n--) { setStat('הקלטה חדשה בעוד ' + n + '…', false); await sleep(1000); }
+    await countdown('הקלטה חדשה בעוד');
     if (!running) { recBusy = false; return; }
     if (!beginRecording()) showRecFail(true);
     recBusy = false; syncRecBtn(); started = true;
@@ -1305,7 +1366,7 @@ async function openPrompter() {
       showRecFail(true);
       await sleep(1500);
     } else {
-      for (let n = 3; n > 0 && running; n--) { setStat('מתחילים בעוד ' + n + '…' + orientHint(), false); await sleep(1000); }
+      await countdown('מתחילים בעוד' + orientHint());
       if (running && !beginRecording()) {
         setStat('אי אפשר להקליט. ממשיך בלי הקלטה.', false);
         showRecFail(true);
@@ -1323,6 +1384,7 @@ async function openPrompter() {
   else setStat('גלילה אוטומטית', true);
 }
 function closePrompter() {
+  $('#countdown').hidden = true;
   stopPaceMeter();
   clearInterval(srWatch);
   const wasRecording = recording;

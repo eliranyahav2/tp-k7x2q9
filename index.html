@@ -43,6 +43,13 @@ button,input,select,textarea{font:inherit;color:inherit}
 .setup{min-height:100vh;min-height:100dvh;max-width:640px;margin:0 auto;padding-inline:16px;padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
 .top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .panel{display:flex;flex-direction:column;gap:10px;flex:none}
+.settings{flex:none;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.settings>summary{list-style:none;padding:12px 2px;font-weight:700;color:var(--fg);font-size:1rem}
+.settings>summary::-webkit-details-marker{display:none}
+.settings[open]>summary{border-bottom:1px solid var(--line);margin-bottom:10px}
+.settings[open]{padding-bottom:12px}
+.settings .panel+.panel{margin-top:10px}
+#sumLine{margin:0;text-align:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
 .ctl{display:flex;flex-direction:column;gap:4px;min-width:0}
 .ctl .row label{font-size:.85rem;color:var(--muted);font-weight:500}
@@ -176,8 +183,10 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v29</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v30</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
+  <p class="hint" id="sumLine"></p>
+  <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
       <label><input type="radio" name="mode" value="voice"><span>לפי הקול</span></label>
@@ -224,12 +233,15 @@ details summary{color:var(--muted);cursor:pointer}
     <p class="hint" id="fsHint" hidden>באייפון אין מסך מלא מתוך Safari. לחץ שיתוף, "הוסף למסך הבית", ופתח את הטלפרומפטר משם.</p>
     <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה" ואז "שמור סרטון". "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
   </section>
-  <button class="go" id="go" type="button">התחל</button>
-  <p class="hint" id="instHint" hidden>להתקנה כאפליקציה: בכרום לוחצים ⋮ (למעלה) ובוחרים "התקנת אפליקציה" או "הוספה למסך הבית".</p>
-  <button class="btn2" id="install" type="button" hidden style="min-height:46px;border-radius:12px;font-weight:700">התקן כאפליקציה בטלפון</button>
+  <div class="panel">
   <button class="btn2" id="diag" type="button" style="min-height:46px;border-radius:12px;font-weight:700">בדיקת מכשיר (20 שניות)</button>
   <button class="btn2" id="copyRep" type="button" style="min-height:46px;border-radius:12px;font-weight:700">העתק דוח תקלה (להדבקה בצ'אט)</button>
   <pre id="diagOut" hidden style="direction:rtl;text-align:right;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;font:.85rem/1.5 var(--font-ui);margin:0"></pre>
+  </div>
+  </details>
+  <button class="go" id="go" type="button">התחל</button>
+  <p class="hint" id="instHint" hidden>להתקנה כאפליקציה: בכרום לוחצים ⋮ (למעלה) ובוחרים "התקנת אפליקציה" או "הוספה למסך הבית".</p>
+  <button class="btn2" id="install" type="button" hidden style="min-height:46px;border-radius:12px;font-weight:700">התקן כאפליקציה בטלפון</button>
   <p class="err" id="err" role="alert" hidden></p>
 </main>
 
@@ -296,7 +308,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v29';
+const APP_VER = 'v30';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -382,7 +394,7 @@ try {
 } catch (e) {}
 if (!SR) cfg.mode = 'auto';
 const colw = () => (cfg.colw == null ? (innerWidth < 700 ? 92 : innerHeight < 520 ? 60 : 34) : cfg.colw);
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} updateSum(); };
 
 /* ============ setup screen ============ */
 const text = $('#text'), fsIn = $('#fs'), anchorIn = $('#anchor'), speedIn = $('#speed');
@@ -401,7 +413,17 @@ function syncOutputs() {
   $('#colwOut').textContent = colw() + '%';
   $('#speedOut').textContent = cfg.wpm + ' מילים לדקה';
 }
+function updateSum() {
+  const el = $('#sumLine'); if (!el) return;
+  const m = cfg.mode === 'voice' ? 'לפי הקול' : cfg.mode === 'pace' ? 'קצב לפי הקול' : 'גלילה אוטומטית';
+  const parts = [m];
+  if (cfg.mode !== 'voice') parts.push(cfg.wpm + ' מילים לדקה');
+  parts.push(cfg.view === 'sent' ? 'משפט אחד' : 'גלילה');
+  parts.push(cfg.record ? (cfg.audioOnly ? 'מקליט קול' : 'מקליט וידאו') : 'בלי הקלטה');
+  el.textContent = parts.join(' · ');
+}
 function applyModeUI() {
+  updateSum();
   $('#modeHint').textContent = cfg.mode === 'voice' ? 'הטקסט עוקב אחרי המילים שאתה אומר. עובד טוב במחשב. אם בטלפון זה לא עובד, הכלי עובר לבד ל"קצב לפי הקול".'
     : cfg.mode === 'pace' ? 'הטקסט זז רק כשאתה מדבר ונעצר כשאתה שותק. עובד בטלפון גם בזמן הקלטת וידאו. המהירות נקבעת למטה.'
     : 'הטקסט זז במהירות קבועה. הקשה על הטקסט עוצרת וממשיכה.';
@@ -618,9 +640,13 @@ function punctPause(i) {
   else if (/,["'”׳״)]*$/.test(w.raw)) x = 0.8;
   return x * k;
 }
+let skipPauseAt = -1;
 function wordTime(i) {
   const w = words[i];
-  return 0.55 + 0.45 * Math.min(2.2, w.n.length / avgLen) + punctPause(i);
+  // the pause for a comma or full stop is spent on the NEXT word, so the next sentence is already
+  // on screen during the pause and you can look ahead at what comes next
+  const pre = i > 0 && skipPauseAt !== i ? punctPause(i - 1) : 0;
+  return 0.55 + 0.45 * Math.min(2.2, w.n.length / avgLen) + pre;
 }
 
 // In landscape the front camera sits on a short edge: left when the phone's top points left
@@ -699,11 +725,12 @@ function chunkEnd(v) {
 function flipIfChunkEnd() {
   if (mode !== 'pace' || pos >= words.length) return;
   const end = chunkEnd(pos);
-  if (end > pos && end - pos <= 2) { clockFrac = 0; setPos(end); if (pos >= words.length) setStat('סוף הטקסט', false); return; }
+  if (end > pos && end - pos <= 2) { clockFrac = 0; setPos(end); skipPauseAt = pos; if (pos >= words.length) setStat('סוף הטקסט', false); return; }
   // You paused at a comma or full stop: that pause was the punctuation. Move past it, and if the
   // text was a word behind (pause right after the next word's punctuation), catch up.
-  if (punctPause(pos) > 0) { clockFrac = 0; setPos(pos + 1); }
-  else if (pos + 1 < words.length && punctPause(pos + 1) > 0 && clockFrac > 0.35) { clockFrac = 0; setPos(pos + 2); }
+  if (pos > 0 && punctPause(pos - 1) > 0) { skipPauseAt = pos; clockFrac = 0; return; }   // you paused yourself: no extra wait
+  if (punctPause(pos) > 0) { clockFrac = 0; setPos(pos + 1); skipPauseAt = pos; }
+  else if (pos + 1 < words.length && punctPause(pos + 1) > 0 && clockFrac > 0.35) { clockFrac = 0; setPos(pos + 2); skipPauseAt = pos; }
 }
 // jump a line (or a sentence part in sentence view) back or forward
 function lineStep(d) {

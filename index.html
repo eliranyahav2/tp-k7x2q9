@@ -164,7 +164,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v23</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v24</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -280,7 +280,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v23';
+const APP_VER = 'v24';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -637,6 +637,24 @@ function applyRender() {
   setY(curY);
 }
 
+// first word after the part currently on screen (sentence, page of lines, or sentence in scroll view)
+function chunkEnd(v) {
+  if (isSent()) return segs[segOf[v]][1];
+  if (cfg.lines > 0 && lineOf.length && pageStart >= 0) {
+    const last = pageStart + cfg.lines - 1;
+    let i = v; while (i < words.length && lineOf[i] <= last) i++;
+    return i;
+  }
+  const n = starts.find(i => i > v);
+  return n === undefined ? words.length : n;
+}
+// In pace mode the clock stops when you stop talking. If you stopped on the last word or two of what is
+// shown, you have finished it: move on so the next part appears and you can keep reading.
+function flipIfChunkEnd() {
+  if (mode !== 'pace' || pos >= words.length) return;
+  const end = chunkEnd(pos);
+  if (end > pos && end - pos <= 2) { clockFrac = 0; setPos(end); if (pos >= words.length) setStat('סוף הטקסט', false); }
+}
 function calcLines() {
   linesDirty = false;
   const tops = [...new Set(words.map(w => w.el.offsetTop))].sort((a, b) => a - b);
@@ -746,7 +764,10 @@ function loop(t) {
   if (mode === 'pace' && analyser) {
     const talking = t < voiceUntil;
     if (cfg.adapt !== false) sylStep(t, talking); else paceMul = 1;
-    if (talking !== wasTalking && !paused && started) { wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); mulShownT = 0; }
+    if (talking !== wasTalking && !paused && started) {
+      if (wasTalking && !talking) flipIfChunkEnd();   // stopped at the end of what is shown: show the next part
+      wasTalking = talking; setStat(talking ? 'מדבר…' : 'ממתין לקול…', talking); mulShownT = 0;
+    }
     if (talking && !paused && started && cfg.adapt !== false && t - mulShownT > 600) {
       mulShownT = t;
       setStat('מדבר… קצב ' + (paceMul > 1.08 ? 'מהיר' : paceMul < 0.92 ? 'איטי' : 'רגיל') + ' ×' + paceMul.toFixed(1), true);

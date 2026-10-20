@@ -183,7 +183,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v30</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v31</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -308,7 +308,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v30';
+const APP_VER = 'v31';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -1352,7 +1352,11 @@ function beginRecording() {
     }
   }
   burnUsed = burn;
-  const types = audioOnlyRun ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'] : ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+  // Ask for AAC sound first: phone galleries (Samsung) can't play Opus sound inside an MP4
+  const types = audioOnlyRun
+    ? ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+    : ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.4D401F,mp4a.40.2', 'video/mp4;codecs=avc1.42E01F,mp4a.40.2',
+       'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=hvc1.1.6.L93.B0,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
   mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
   chunks = [];
   try {
@@ -1361,6 +1365,7 @@ function beginRecording() {
     mr = new MediaRecorder(src, mo);
     mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
     mr.start(1000);
+    if (mr.mimeType) mime = mr.mimeType;   // the recorder reports the codecs it actually chose
   } catch (e) {
     recErrors.push('MediaRecorder:' + (e && e.name));
     return false;
@@ -1443,6 +1448,7 @@ function stopCamera() {
 function finishRecording() {
   return new Promise(res => {
     const done = () => {
+      if (mr && mr.mimeType) mime = mr.mimeType;
       const blob = new Blob(chunks, { type: mime || (audioOnlyRun ? 'audio/webm' : 'video/webm') });
       stopCamera();
       res(blob);
@@ -1481,10 +1487,11 @@ function showResult(blob, secs) {
   else msg = 'הסרטון יצא שקט. בדוק את המיקרופון.';
   if (audioOnlyRun) msg = msg.replace('הסרטון קלט קול', 'ההקלטה קלטה קול').replace('הקול בסרטון יצא שקט', 'הקול בהקלטה יצא שקט')
     .replace('הסרטון יצא שקט', 'ההקלטה יצאה שקטה').replace('נגן את הסרטון', 'נגן את ההקלטה');
+  if (blob.size && !/mp4a|aac/i.test(mime)) msg += ' שים לב: הקול נשמר בפורמט Opus, כי הדפדפן לא מאפשר כאן AAC. באפליקציה ובכרום הוא נשמע, אבל גלריית סמסונג לא מנגנת קול כזה.';
   verdict.textContent = msg;
   verdict.classList.toggle('bad', bad);
   $('#report').value = [APP_VER, 'audioOnly=' + audioOnlyRun, 'fellBack=' + (fellBack || 'no'), 'seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
-    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'errors=' + (recErrors.join('|') || 'none'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
+    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'aacSupport=' + ['video/mp4;codecs=avc1,mp4a.40.2', 'audio/mp4;codecs=mp4a.40.2'].map(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return '?'; } }).join('/'), 'errors=' + (recErrors.join('|') || 'none'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
   const sh = $('#share');
   sh.hidden = !(resultFile && navigator.canShare && navigator.canShare({ files: [resultFile] }));
   $('#result').hidden = false;
@@ -1658,6 +1665,10 @@ async function buildReport() {
   L.push('url=' + location.protocol + '//' + location.host + location.pathname);
   L.push('secure=' + window.isSecureContext + ' installed=' + matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
   L.push('screen=' + innerWidth + 'x' + innerHeight + ' orient=' + ((screen.orientation && screen.orientation.type) || '?') + ' touch=' + navigator.maxTouchPoints);
+  try {
+    const ae = window.AudioEncoder ? await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 128000 }) : null;
+    L.push('recAAC=' + MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2') + ' webcodecsAAC=' + (ae ? ae.supported : 'none'));
+  } catch (e) { L.push('recAAC=?'); }
   L.push('SR=' + !!SR + ' MediaRecorder=' + !!window.MediaRecorder + ' gUM=' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
   for (const n of ['camera', 'microphone']) {
     try { const st = await navigator.permissions.query({ name: n }); L.push('perm.' + n + '=' + st.state); } catch (e) { L.push('perm.' + n + '=?'); }

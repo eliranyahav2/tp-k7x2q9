@@ -183,7 +183,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v31</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v32</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -308,7 +308,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v31';
+const APP_VER = 'v32';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -346,12 +346,19 @@ function similar(a, b) {
 }
 // words: [{n}] normalized script words; pos: index of the next word to be said;
 // heard: normalized words heard so far. Returns the new pos, or -1 when nothing matches.
+// Short everyday words ("יש גם", "את ה…") appear all over a script. A match made only of them must not
+// pull the text far ahead; a far jump needs real content words.
+const STOP = new Set(['יש', 'גמ', 'את', 'של', 'על', 'זה', 'זו', 'לא', 'מה', 'אמ', 'כל', 'הוא', 'היא', 'הממ', 'הנ', 'אז', 'רק', 'עמ', 'או', 'כי',
+  'אני', 'אתה', 'את', 'אתמ', 'אנחנו', 'אפשר', 'מאוד', 'כאנ', 'פשוט', 'בו', 'בה', 'להמ', 'לכמ', 'שלכמ', 'שלנו', 'שלי', 'אותו', 'אותה',
+  'אותמ', 'הזה', 'הזאת', 'עוד', 'כמו', 'כדי', 'אבל', 'אמ', 'גמכנ', 'שהוא', 'שהיא', 'היה', 'היו', 'יהיה', 'אינ', 'כנ', 'למשל', 'בואו', 'אז']);
+function isContent(w) { return w.length >= 4 && !STOP.has(w) && !(PREFIX.includes(w[0]) && STOP.has(w.slice(1))); }
 function findNext(words, pos, heard) {
   if (!heard.length || pos >= words.length) return -1;
   for (let k = Math.min(3, heard.length); k >= 1; k--) {
     const seq = heard.slice(-k);
-    const back = k === 3 ? 8 : 0;
-    const fwd = k === 1 ? 3 : 60;
+    const content = seq.filter(isContent).length;
+    const back = k === 3 ? (content >= 2 ? 30 : 8) : 0;
+    const fwd = k === 1 ? 3 : k === 2 ? (content >= 1 ? 20 : 4) : (content >= 2 ? 60 : 6);
     let bestNp = -1, bestScore = Infinity;
     for (let np = Math.max(k, pos - back); np <= Math.min(words.length, pos + fwd); np++) {
       if (k === 1) {

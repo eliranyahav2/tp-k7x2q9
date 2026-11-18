@@ -183,7 +183,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v33</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v34</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -308,7 +308,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v33';
+const APP_VER = 'v34';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -940,11 +940,12 @@ let noiseFloor = 0, voiceUntil = 0, wasTalking = false, paceStream = null, paceA
 async function ensurePaceMeter() {
   if (analyser || paceStream) return;
   try {
-    paceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    paceStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_C });
     paceAcx = new (window.AudioContext || window.webkitAudioContext)(); paceAcx.resume();
     analyser = paceAcx.createAnalyser(); analyser.fftSize = 1024;
     paceAcx.createMediaStreamSource(paceStream).connect(analyser);
     abuf = new Uint8Array(analyser.fftSize);
+    await reviveMic(paceStream, analyser, paceAcx);
   } catch (e) {
     stopPaceMeter();
     if (running && mode === 'pace') { showNote('אין גישה למיקרופון (' + camText(e && e.name) + '). עברתי לגלילה אוטומטית.'); setMode('auto'); modeRadios(); }
@@ -1178,6 +1179,45 @@ function camText(nm) {
 let burn = false, useCv = false, burnUsed = false, outCtx = null, capChunks = [], capOf = [], capIdx = 0, capIdxT = 0, recBusy = false;
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const AUDIO_C = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+// true when the mic delivers digital silence (exact zeros) - a real microphone always has some noise
+async function micSilent(an, ctx, ms) {
+  if (!an || !ctx) return false;
+  try { if (ctx.state !== 'running') await Promise.race([ctx.resume(), sleep(600)]); } catch (e) {}
+  if (ctx.state !== 'running') return false;
+  const buf = new Uint8Array(an.fftSize), t0 = performance.now();
+  while (performance.now() - t0 < ms) {
+    an.getByteTimeDomainData(buf);
+    for (let i = 0; i < buf.length; i++) if (buf[i] !== 128) return false;
+    await sleep(60);
+  }
+  return true;
+}
+// what "בדיקת מכשיר" did by chance: a short run of the speech service resets the phone's audio input
+async function kickAudioInput() {
+  if (!SR) { await sleep(300); return; }
+  try { const r = new SR(); r.lang = cfg.lang; r.start(); await sleep(1300); try { r.abort(); } catch (e) {} } catch (e) {}
+  await sleep(450);
+}
+// if the mic of `stream` is silent, reset the input and swap in a fresh audio track
+async function reviveMic(stream, an, ctx) {
+  if (!stream || !(await micSilent(an, ctx, 900))) return stream;
+  recErrors.push('silent-mic');
+  const old = stream.getAudioTracks()[0];
+  if (old) { stream.removeTrack(old); old.stop(); }
+  await kickAudioInput();
+  try {
+    const fresh = (await navigator.mediaDevices.getUserMedia({ audio: AUDIO_C })).getAudioTracks()[0];
+    stream.addTrack(fresh);
+    fresh.onmute = () => { trackMuted = true; };
+    ctx.createMediaStreamSource(new MediaStream([fresh])).connect(an);
+  } catch (e) { recErrors.push('revive:' + (e && e.name)); }
+  if (await micSilent(an, ctx, 900)) {
+    recErrors.push('still-silent');
+    showNote('המיקרופון של הטלפון מחזיר שקט מוחלט. סגור את האפליקציה לגמרי ופתח שוב, או הרץ "בדיקת מכשיר" בהגדרות.');
+  } else recErrors.push('revived');
+  return stream;
+}
 async function countdown(label) {
   const el = $('#countdown');
   for (let n = 3; n > 0 && running; n--) {
@@ -1200,19 +1240,19 @@ async function startCamera() {
     const hq = cfg.qual === 1080;
     audioOnlyRun = !!cfg.audioOnly;
     if (audioOnlyRun) {
-      camStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      camStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_C });
     } else try { try {
       camStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'user' }, width: { ideal: hq ? 1920 : 1280 }, height: { ideal: hq ? 1080 : 720 }, frameRate: { ideal: 30 } },
-        audio: true
+        audio: AUDIO_C
       });
     } catch (e1) {
       if (e1 && (e1.name === 'NotAllowedError' || e1.name === 'SecurityError')) throw e1;
-      camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });   // plain retry for picky phones
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: AUDIO_C });   // plain retry for picky phones
     } } catch (ev) {
       // camera refused or busy: still record the voice rather than nothing
       recErrors.push('video:' + (ev && ev.name));
-      try { camStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (ea) { throw ev; }
+      try { camStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_C }); } catch (ea) { throw ev; }
       audioOnlyRun = true;
       camNote = 'המצלמה לא זמינה (' + camText(ev && ev.name) + '). מקליט קול בלבד.';
     }
@@ -1242,6 +1282,7 @@ async function startCamera() {
     } catch (e) { analyser = null; recErrors.push('audioContext:' + (e && e.name)); }
   }
   if (camNote) showNote(camNote);
+  if (analyser) { setStat('בודק את המיקרופון…', false); await reviveMic(camStream, analyser, acx); }
   const at = camStream.getAudioTracks()[0];
   if (at) at.onmute = () => { trackMuted = true; };
   burn = !!cfg.burn;
@@ -1712,6 +1753,9 @@ async function buildReport() {
   try { const ds = await navigator.mediaDevices.enumerateDevices(); L.push('devices: video=' + ds.filter(d => d.kind === 'videoinput').length + ' audio=' + ds.filter(d => d.kind === 'audioinput').length); } catch (e) { L.push('devices=?'); }
   L.push('cfg: mode=' + cfg.mode + ' record=' + cfg.record + ' audioOnly=' + !!cfg.audioOnly + ' burn=' + cfg.burn + ' orient=' + cfg.orient + ' qual=' + cfg.qual + ' mirror=' + cfg.mirror + ' render=' + (cfg.render || 0) + ' preview=' + (cfg.preview !== false) + ' fade=' + cfg.fade + ' lines=' + cfg.lines + ' wpm=' + cfg.wpm + ' lang=' + cfg.lang);
   L.push('last: camWhy=' + (camWhy || '-') + ' camNote=' + (camNote || '-') + ' recErrors=' + (recErrors.join('|') || '-') + ' srErrors=' + (srErrors.join('|') || '-') + ' speechEvents=' + speechEvents + ' peak=' + peak.toFixed(2) + ' fellBack=' + (fellBack || '-'));
+  try { const t = camStream && camStream.getAudioTracks()[0]; const st = t && t.getSettings ? t.getSettings() : {};
+    L.push('audio: ctx=' + (acx ? acx.state : paceAcx ? paceAcx.state : '-') + ' track=' + (t ? t.readyState + (t.muted ? '/muted' : '') : '-') + ' ec=' + st.echoCancellation + ' ns=' + st.noiseSuppression + ' agc=' + st.autoGainControl);
+  } catch (e) { L.push('audio=?'); }
   L.push('status=' + statEl.textContent);
   L.push(navigator.userAgent);
   return L.join('\n');

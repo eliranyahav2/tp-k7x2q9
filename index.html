@@ -183,7 +183,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v32</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v33</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -308,7 +308,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v32';
+const APP_VER = 'v33';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -1404,6 +1404,7 @@ async function recordNow() {
   const wasVoice = mode === 'voice' && !paused;
   if (wasVoice) stopRec();
   setStat('מבקש גישה למצלמה ולמיקרופון…', false);
+  if (fsEl() && (await permState('camera')) !== 'granted') { exitFull(); await sleep(300); }   // let the prompt show
   const ok = await startCamera();
   if (!running) { if (ok) stopCamera(); recBusy = false; return; }
   let failed = !ok;
@@ -1506,8 +1507,36 @@ function showResult(blob, secs) {
 }
 
 /* open / close */
+// A permission prompt can't appear over a full-screen page (on the phone it is silently refused).
+// With "allow this time" Chrome asks again in every new session, so ask BEFORE going full screen.
+async function permState(name) {
+  try { return (await navigator.permissions.query({ name })).state; } catch (e) { return 'unknown'; }
+}
+async function ensurePerm(video) {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return false;
+  const need = [await permState('microphone')];
+  if (video) need.push(await permState('camera'));
+  if (need.every(st => st === 'granted')) return true;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia(video ? { audio: true, video: true } : { audio: true });
+    s.getTracks().forEach(t => t.stop());
+    return true;
+  } catch (e) { return false; }
+}
+let opening = false;
 async function openPrompter() {
+  if (opening) return;
   errEl.hidden = true;
+  const wantMode = cfg.mode === 'voice' && SR ? 'voice' : cfg.mode === 'pace' ? 'pace' : 'auto';
+  const needMic = (cfg.record && canRecord) || wantMode !== 'auto';
+  if (needMic) {
+    opening = true;
+    errEl.textContent = 'מבקש אישור למיקרופון' + (cfg.record && !cfg.audioOnly ? ' ולמצלמה' : '') + '…';
+    errEl.hidden = false;
+    await ensurePerm(!!(cfg.record && canRecord && !cfg.audioOnly));
+    errEl.hidden = true;
+    opening = false;
+  }
   cfg.text = text.value;
   save();
   build();

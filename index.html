@@ -161,6 +161,14 @@ body.mirror #stage{transform:scaleX(-1)}
 #result video{flex:1 1 0;min-height:120px;width:100%;object-fit:contain;background:#000;border-radius:10px}
 .verdict{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:600}
 .verdict.bad{border-color:var(--warn)}
+.edbox{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.edbox h2{margin:0;font-size:1rem}
+.edbox p{margin:0;font-size:.92rem}
+.edbar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.edbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+#result .edbox video{flex:none;height:26vh;min-height:0}
+#result .edbox video.edwork{height:14vh;opacity:.55}
+.edbox .linkbtn{min-height:50px}
 .linkbtn{display:flex;align-items:center;justify-content:center;min-height:54px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:800;text-decoration:none}
 details summary{color:var(--muted);cursor:pointer}
 #report{min-height:110px;margin-top:8px;direction:ltr;font:.8rem/1.4 ui-monospace,Menlo,monospace}
@@ -183,7 +191,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v34</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v35</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -213,6 +221,8 @@ details summary{color:var(--muted);cursor:pointer}
         <select id="viewSel"><option value="scroll">גלילה רציפה</option><option value="sent">משפט אחד ליד המצלמה</option></select></div>
       <div class="ctl" id="rowLines"><div class="row"><label for="linesSel" title="להציג רק את השורות הקרובות לעדשה">שורות מוצגות</label></div>
         <select id="linesSel"><option value="0">הכל</option><option value="1">שורה אחת</option><option value="2">שתי שורות</option><option value="3">שלוש שורות</option></select></div>
+      <div class="ctl" id="rowRetake"><div class="row"><label for="retakeTo" title="מה קורה כשלוחצים ↺ שוב באמצע">כפתור "↺ שוב" חוזר ל</label></div>
+        <select id="retakeTo"><option value="shown">תחילת מה שמוצג במסך</option><option value="sent">תחילת המשפט</option></select></div>
       <div class="ctl" id="rowOrient"><div class="row"><label for="orient" title="כיוון הסרטון שנשמר, בלי קשר לכיוון המסך">כיוון הסרטון</label></div>
         <select id="orient"><option value="auto">לפי המסך</option><option value="land">לרוחב (16:9)</option><option value="port">לאורך (9:16)</option></select></div>
       <div class="ctl" id="rowQual"><div class="row"><label for="qual">איכות</label></div>
@@ -228,10 +238,12 @@ details summary{color:var(--muted);cursor:pointer}
       <label class="check"><input type="checkbox" id="audioOnly"> קול בלבד (בלי וידאו)</label>
       <label class="check"><input type="checkbox" id="preview"> הצג אותי בפינה בזמן הקלטה</label>
       <label class="check"><input type="checkbox" id="burn"> כתוביות בתוך הסרטון</label>
+      <label class="check"><input type="checkbox" id="autoEdit"> הכן גם גרסה ערוכה (הגלם המלא נשמר תמיד)</label>
+      <label class="check"><input type="checkbox" id="cutSilence"> בגרסה הערוכה: לחתוך שתיקות ארוכות</label>
     </div>
     <p class="note" id="support" hidden></p>
     <p class="hint" id="fsHint" hidden>באייפון אין מסך מלא מתוך Safari. לחץ שיתוף, "הוסף למסך הבית", ופתח את הטלפרומפטר משם.</p>
-    <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה" ואז "שמור סרטון". "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
+    <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה". מקבלים את הגלם המלא, ובנוסף גרסה ערוכה בלי שתיקות ובלי קטעים שחזרת עליהם (לחצת "↺ שוב", או במחשב: התחלת משפט מחדש). "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
   </section>
   <div class="panel">
   <button class="btn2" id="diag" type="button" style="min-height:46px;border-radius:12px;font-weight:700">בדיקת מכשיר (20 שניות)</button>
@@ -261,6 +273,7 @@ details summary{color:var(--muted);cursor:pointer}
     <div class="btns main">
       <button class="btn primary" id="exit" type="button">סיום</button>
       <button class="btn" id="pause" type="button">השהה</button>
+      <button class="btn" id="retakeBtn" type="button" title="טעיתי: חזור לתחילת מה שמוצג, והקטע יימחק בגרסה הערוכה">↺ שוב</button>
       <button class="btn" id="restart" type="button">התחל מחדש</button>
       <button class="btn rec" id="recBtn" type="button">● הקלט</button>
       <button class="btn landonly" id="lineBack" type="button">שורה ↑</button>
@@ -292,6 +305,14 @@ details summary{color:var(--muted);cursor:pointer}
     <div class="rhead"><h1>ההקלטה מוכנה</h1><button class="btn2" id="backTop" type="button">חזרה ›</button></div>
     <video id="playback" controls playsinline></video>
     <div class="verdict" id="verdict"></div>
+    <div class="edbox" id="edBox" hidden>
+      <h2>גרסה ערוכה</h2>
+      <p id="edStat"></p>
+      <div class="edbar" id="edBar"><i id="edProg"></i></div>
+      <video id="edPlay" controls playsinline hidden></video>
+      <a class="linkbtn" id="dlEdit" download hidden>שמור ערוך</a>
+      <button class="btn2" id="edRetry" type="button" hidden style="min-height:46px;border-radius:12px;font-weight:700">נסה שוב להכין גרסה ערוכה</button>
+    </div>
     <details><summary>פרטים טכניים</summary><textarea id="report" readonly aria-label="פרטים טכניים"></textarea></details>
   </div>
   <div class="actions">
@@ -308,7 +329,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v34';
+const APP_VER = 'v35';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -498,6 +519,11 @@ const burnIn = $('#burn');
 burnIn.checked = !!cfg.burn && canRecord;
 burnIn.disabled = !canRecord;
 burnIn.addEventListener('change', () => { cfg.burn = burnIn.checked; save(); });
+const autoEditIn = $('#autoEdit'), cutSilIn = $('#cutSilence'), retakeSel = $('#retakeTo');
+autoEditIn.checked = cfg.autoEdit !== false; cutSilIn.checked = cfg.cutSilence !== false; retakeSel.value = cfg.retakeTo || 'shown';
+autoEditIn.addEventListener('change', () => { cfg.autoEdit = autoEditIn.checked; save(); });
+cutSilIn.addEventListener('change', () => { cfg.cutSilence = cutSilIn.checked; save(); });
+retakeSel.addEventListener('change', () => { cfg.retakeTo = retakeSel.value; save(); });
 langSel.addEventListener('change', () => { cfg.lang = langSel.value; save(); });
 const leadSel = $('#lead');
 leadSel.value = String(cfg.lead);
@@ -816,13 +842,16 @@ function updateProgress() {
   $('#progress').style.width = (words.length ? view() / words.length * 100 : 0) + '%';
 }
 function setPos(p) {
+  const was = pos;
   pos = clamp(p, 0, words.length);
+  if (recording && pos > was) edMark(was, pos);
   paint();
   aim(false);
   if (view() >= words.length && mode === 'voice') setStat('סוף הטקסט', false);
 }
 function jumpTo(p) {
   lastSync = Date.now(); clockFrac = 0;
+  if (recording) edJumpT = recNow();
   setPos(p - (mode === 'voice' ? cfg.lead : 0));
   if (mode === 'voice' && !paused) { stopRec(); startRec(); }
 }
@@ -856,6 +885,8 @@ function loop(t) {
     if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.0007;
     const thr = cfg.sens === 'high' ? 0.022 : cfg.sens === 'low' ? 0.08 : 0.04;
     if (lvl > noiseFloor + Math.max(thr, noiseFloor) && isVoiced()) voiceUntil = t + (cfg.hold || 350);
+    // for the edited version: anything a bit louder than the room counts as talking (keeps more, never less)
+    if (recording) edVoice(lvl > noiseFloor + Math.max(thr, noiseFloor) * 0.8);
     if (mode === 'voice' && running && !paused && t < voiceUntil) talkMs += dt * 1000;
   }
   if (mode === 'pace' && analyser) {
@@ -1047,6 +1078,7 @@ function onResult(e) {
   if (!heard.length) return;
   heardEl.textContent = shown.slice(-6).join(' ');
   const np = findNext(words, pos, heard);
+  if (recording) edRepeat(np, heard);
   if (np >= 0) {
     lastSync = Date.now();
     if (np !== pos) setPos(np);
@@ -1413,6 +1445,7 @@ function beginRecording() {
     mr = new MediaRecorder(src, mo);
     mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
     mr.start(1000);
+    edReset();
     if (mr.mimeType) mime = mr.mimeType;   // the recorder reports the codecs it actually chose
   } catch (e) {
     recErrors.push('MediaRecorder:' + (e && e.name));
@@ -1495,6 +1528,7 @@ function stopCamera() {
   syncRecBtn();
 }
 function finishRecording() {
+  edEnd = recNow();
   return new Promise(res => {
     const done = () => {
       if (mr && mr.mimeType) mime = mr.mimeType;
@@ -1508,6 +1542,226 @@ function finishRecording() {
     } else done();
   });
 }
+/* ============ auto edit (no AI): a timeline of the take -> a second, cut version ============
+   The raw recording is never touched. While recording we log when you talk (from the mic level),
+   when each word was passed, and the parts to throw away ("↺ שוב", or a sentence you started again).
+   After "סיום ושמירה" the raw file is replayed into a second recorder that skips those parts. */
+let recT0 = 0, edEnd = 0, edSpeech = [], edCuts = [], edWord = [], edRepDone = new Set(), edJumpT = 0, lastRetake = 0, lastRetakeTo = -1;
+let edAbort = null, edUrl = '', edFile = null;
+const recNow = () => (performance.now() - recT0) / 1000;
+function edReset() { recT0 = performance.now(); edEnd = 0; edSpeech = []; edCuts = []; edWord = []; edRepDone = new Set(); edJumpT = 0; lastRetake = 0; lastRetakeTo = -1; }
+function edVoice(on) {
+  if (!on) return;
+  const t = recNow(), s = edSpeech[edSpeech.length - 1];
+  if (s && t - s[1] < 0.25) s[1] = t; else edSpeech.push([t, t]);
+}
+function edMark(from, to) {   // words from..to-1 were just passed
+  const t = recNow();
+  for (let j = Math.max(0, from); j < to && j < words.length; j++) if (edWord[j] == null) edWord[j] = t;
+}
+function edForget(i) { if (edWord.length > i) edWord.length = Math.max(0, i); }
+const edLat = () => (mode === 'voice' ? 0.8 : 0);   // the recognizer reports a word about this late
+const edOnsets = (lo, hi) => edSpeech.filter(s => s[0] >= lo && s[0] <= hi).map(s => s[0]);
+const nearest = (arr, x) => arr.reduce((a, b) => (Math.abs(b - x) < Math.abs(a - x) ? b : a));
+// about when the first try of word i started
+function edStartOf(i, hi) {
+  if (edWord[i] != null) {
+    const est = edWord[i] - edLat() - 0.35, c = edOnsets(est - 1, hi);
+    return c.length ? nearest(c, est) : est;
+  }
+  let prev = 0;
+  for (let j = i - 1; j >= Math.max(0, i - 3); j--) if (edWord[j] != null) { prev = edWord[j] - edLat(); break; }
+  prev = Math.max(prev, edJumpT);
+  const c = edOnsets(prev - 0.15, hi);
+  return c.length ? c[0] : hi;
+}
+// "↺ שוב": the failed try, from where it started until now, goes
+function edRetake(target) {
+  const now = recNow(), t0 = edStartOf(target, now);
+  if (now - t0 > 0.05) edCuts.push([t0 - 0.05, now + 0.15, 'retake']);
+  edForget(target);
+}
+// voice mode, on the computer: the same words heard twice in a row = you gave up on a try and
+// started again. The first try goes. Only when the text itself doesn't repeat those words nearby.
+function edRepeat(np, heard) {
+  if (np < 3) return;
+  const L = heard.length;
+  for (let t = 0; t < 3; t++) if (!similar(words[np - 3 + t].n, heard[L - 3 + t])) return;
+  let R = np - 3, h = L - 4;   // how far back does the new try go?
+  while (R > 0 && h >= 0 && np - R < 25 && similar(words[R - 1].n, heard[h])) { R--; h--; }
+  const first = h + 1;
+  let q = -1;
+  for (let j = first - 2; j >= Math.max(0, first - 15); j--) if (similar(words[R].n, heard[j]) && similar(words[R + 1].n, heard[j + 1])) { q = j; break; }
+  if (q < 0 || edRepDone.has(R + ':' + q)) return;
+  for (let i = Math.max(0, R - 25); i < Math.min(words.length - 1, R + 25); i++)
+    if (i !== R && similar(words[i].n, words[R].n) && similar(words[i + 1].n, words[R + 1].n)) return;
+  edRepDone.add(R + ':' + q);
+  const now = recNow(), t1 = edStartOf(R, now);
+  const est2 = now - 0.9 - 0.42 * (L - first), c = edOnsets(Math.max(t1 + 0.5, est2 - 1.2), est2 + 0.6);
+  const t2 = (c.length ? nearest(c, est2) : est2) - 0.05;
+  if (t2 - t1 > 0.5 && t2 - t1 < 45) edCuts.push([t1 - 0.05, t2, 'repeat']);
+  edForget(R); edMark(R, np);
+}
+function chunkStart(v) {
+  let s = 0;
+  for (const i of starts) { if (i <= v) s = i; else break; }
+  if (cfg.retakeTo === 'sent' || isSent() || !(cfg.lines > 0)) return isSent() ? segs[segOf[v]][0] : s;
+  if (linesDirty) calcLines();
+  const i = lineOf.indexOf(pageStart >= 0 ? pageStart : lineOf[v]);
+  return i >= 0 && i <= v ? i : s;
+}
+function retake() {
+  if (!running || !words.length) return;
+  const v = clamp(view(), 0, words.length - 1);
+  let target = chunkStart(v);
+  const again = Date.now() - lastRetake < 3000 && v <= lastRetakeTo && lastRetakeTo > 0;
+  if (again) target = chunkStart(lastRetakeTo - 1);   // pressed twice: one more back
+  if (recording) edRetake(target);
+  lastRetake = Date.now(); lastRetakeTo = target;
+  pageStart = -1;
+  jumpTo(target);
+  if (recording) { showNote('↺ הקטע סומן למחיקה בגרסה הערוכה. לחיצה נוספת מיד: עוד משפט אחורה.'); clearTimeout(retake.t); retake.t = setTimeout(() => showNote(''), 2500); }
+}
+
+// what to keep, in seconds of the raw recording
+function edPlan() {
+  const dur = edEnd;
+  const sp = edSpeech.filter(s => s[0] < dur);
+  const talk = sp.reduce((a, s) => a + s[1] - s[0], 0);
+  // if the mic level looked odd (almost no talking found), don't trust it: cut no silence
+  const silenceOk = cfg.cutSilence !== false && sp.length > 0 && talk > dur * 0.2;
+  let keep = [];
+  if (silenceOk) {
+    sp.forEach(s => {
+      const a = Math.max(0, s[0] - 0.2), b = Math.min(dur, s[1] + 0.3), l = keep[keep.length - 1];
+      if (l && a - l[1] < 0.15) l[1] = Math.max(l[1], b); else keep.push([a, b]);
+    });
+  } else keep = [[0, dur]];
+  const silCut = dur - keep.reduce((a, k) => a + k[1] - k[0], 0);
+  edCuts.map(c => [Math.max(0, c[0]), Math.min(dur, c[1])]).filter(c => c[1] > c[0]).forEach(c => {
+    keep = keep.flatMap(k => (c[1] <= k[0] || c[0] >= k[1] ? [k] : [[k[0], c[0]], [c[1], k[1]]].filter(q => q[1] - q[0] > 0.01)));
+  });
+  keep = keep.filter(k => k[1] - k[0] >= 0.2);
+  const kept = keep.reduce((a, k) => a + k[1] - k[0], 0);
+  return { keep, dur, kept, removed: dur - kept, silCut, silenceOk,
+    retakes: edCuts.filter(c => c[2] === 'retake').length, repeats: edCuts.filter(c => c[2] === 'repeat').length };
+}
+// replay the raw file and record only the kept parts (the parts in between are fast-forwarded)
+function buildEdited(blob, keep, onProg) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob), v = document.createElement('video');
+    v.className = 'edwork'; v.playsInline = true; v.preload = 'auto';
+    $('#edBox').insertBefore(v, $('#edPlay'));
+    let ctx = null, rec = null, out = [], timer = 0, done = false, ki = 0, lastCT = -1, lastMove = Date.now();
+    const total = keep.reduce((a, k) => a + k[1] - k[0], 0);
+    const fin = err => {
+      if (done) return; done = true;
+      clearInterval(timer); edAbort = null;
+      try { v.pause(); } catch (e) {}
+      const end = () => {
+        v.removeAttribute('src'); v.load(); v.remove(); URL.revokeObjectURL(url);
+        try { ctx && ctx.close(); } catch (e) {}
+        if (err) reject(err); else resolve(new Blob(out, { type: (rec && rec.mimeType) || blob.type }));
+      };
+      if (rec && rec.state !== 'inactive') { rec.onstop = end; try { rec.stop(); } catch (e) { end(); } } else end();
+    };
+    edAbort = () => fin(new Error('abort'));
+    v.onerror = () => fin(new Error('decode'));
+    v.onended = () => fin();
+    const tick = () => {
+      if (done) return;
+      const t = v.currentTime;
+      if (t !== lastCT) { lastCT = t; lastMove = Date.now(); }
+      else if (Date.now() - lastMove > 6000) return fin(new Error('stall'));
+      while (ki < keep.length && t >= keep[ki][1]) ki++;
+      if (ki >= keep.length) return fin();
+      if (t >= keep[ki][0]) {
+        if (v.playbackRate !== 1) v.playbackRate = 1;
+        if (rec.state === 'paused') rec.resume();
+      } else {
+        if (rec.state === 'recording') rec.pause();
+        const gap = keep[ki][0] - t, r = gap > 3 ? 8 : gap > 0.8 ? 2.5 : 1;
+        if (v.playbackRate !== r) v.playbackRate = r;
+      }
+      let doneS = 0;
+      for (let i = 0; i < ki; i++) doneS += keep[i][1] - keep[i][0];
+      if (t > keep[ki][0]) doneS += t - keep[ki][0];
+      onProg(Math.min(1, doneS / (total || 1)));
+    };
+    v.addEventListener('playing', () => {
+      if (rec || done) return;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        ctx = new AC();
+        const dest = ctx.createMediaStreamDestination();
+        ctx.createMediaElementSource(v).connect(dest);   // to the recorder only, not the speakers
+        if (ctx.state === 'suspended') ctx.resume();
+        const tracks = dest.stream.getAudioTracks();
+        if (!audioOnlyRun) {
+          const vs = v.captureStream ? v.captureStream() : v.mozCaptureStream();
+          tracks.unshift(...vs.getVideoTracks());
+        }
+        const mo = audioOnlyRun ? { audioBitsPerSecond: 128000 } : { videoBitsPerSecond: cfg.qual === 1080 ? 8000000 : 5000000 };
+        const mt = (blob.type || '').split(';')[0] === (mime || '').split(';')[0] ? mime : blob.type;
+        if (mt && MediaRecorder.isTypeSupported(mt)) mo.mimeType = mt;
+        rec = new MediaRecorder(new MediaStream(tracks), mo);
+        rec.ondataavailable = ev => { if (ev.data && ev.data.size) out.push(ev.data); };
+        rec.start(1000);
+        if (v.currentTime < keep[0][0]) rec.pause();
+        timer = setInterval(tick, 10);
+      } catch (e) { fin(e); }
+    });
+    v.src = url;
+    v.play().catch(e => fin(e));
+  });
+}
+function edMsg(p) {
+  const parts = [];
+  if (p.silenceOk && p.silCut >= 0.5) parts.push('שתיקות');
+  if (p.retakes) parts.push(p.retakes === 1 ? 'קטע אחד שחזרת עליו (↺)' : p.retakes + ' קטעים שחזרת עליהם (↺)');
+  if (p.repeats) parts.push(p.repeats === 1 ? 'משפט אחד שהתחלת מחדש' : p.repeats + ' משפטים שהתחלת מחדש');
+  return 'יורדות ' + Math.round(p.removed) + ' שניות מתוך ' + Math.round(p.dur) + (parts.length ? ' (' + parts.join(', ') + ')' : '') + '.';
+}
+function edClear() {
+  if (edAbort) edAbort();
+  if (edUrl) { URL.revokeObjectURL(edUrl); edUrl = ''; }
+  edFile = null;
+  const pv = $('#edPlay'); pv.removeAttribute('src'); pv.load(); pv.hidden = true;
+  $('#dlEdit').hidden = true; $('#edBox').hidden = true; $('#edRetry').hidden = true;
+}
+let edBlob = null;
+function startEdit(blob) {
+  edClear();
+  edBlob = blob;
+  if (cfg.autoEdit === false || !blob.size || !edEnd) return;
+  const p = edPlan(), box = $('#edBox'), st = $('#edStat'), bar = $('#edBar'), prog = $('#edProg');
+  box.hidden = false; bar.hidden = true;
+  $('#report').value += '\nedit: dur=' + p.dur.toFixed(1) + ' kept=' + p.kept.toFixed(1) + ' speech=' + edSpeech.length + ' cuts=' + edCuts.map(c => c[2] + ':' + c[0].toFixed(1) + '-' + c[1].toFixed(1)).join(',');
+  if (p.removed < 0.5 || !p.keep.length) { st.textContent = p.silenceOk || cfg.cutSilence === false ? 'לא נמצא מה לחתוך. הגלם הוא הגרסה הסופית.' : 'לא זוהה דיבור ברור, אז לא נחתך כלום. הגלם הוא הגרסה הסופית.'; return; }
+  st.textContent = 'מכין גרסה ערוכה… ' + edMsg(p) + ' זה לוקח בערך ' + Math.max(5, Math.round(p.kept + 3)) + ' שניות. אפשר כבר לשמור את הגלם.';
+  bar.hidden = false; prog.style.width = '0';
+  lockScreen();   // the screen must stay on while it works
+  buildEdited(blob, p.keep, f => { prog.style.width = Math.round(f * 100) + '%'; }).then(eb => {
+    bar.hidden = true;
+    if (!eb.size) throw new Error('empty');
+    edUrl = URL.createObjectURL(eb);
+    const pv = $('#edPlay'), dl = $('#dlEdit');
+    pv.src = edUrl; pv.hidden = false;
+    const name = $('#dl').download.replace(/(\.\w+)$/, '-edited$1');
+    dl.href = edUrl; dl.download = name; dl.hidden = false;
+    dl.textContent = audioOnlyRun ? 'שמור הקלטה ערוכה' : 'שמור סרטון ערוך';
+    edFile = typeof File === 'function' ? new File([eb], name, { type: eb.type }) : null;
+    unlockScreen();
+    st.textContent = 'מוכן. ' + edMsg(p) + ' צפה ובדוק. אם משהו נחתך לא טוב, הגלם המלא עדיין כאן למטה.';
+  }).catch(e => {
+    if (e && e.message === 'abort') return;
+    bar.hidden = true; unlockScreen();
+    const why = e && e.message === 'stall' ? 'העיבוד נעצר, אולי המסך כבה או שיצאת מהאפליקציה באמצע' : ((e && (e.message || e.name)) || 'שגיאה');
+    st.textContent = 'לא הצלחתי להכין גרסה ערוכה (' + why + '). הגלם המלא שמור ותקין.';
+    $('#edRetry').hidden = false;
+  });
+}
+
 function showResult(blob, secs) {
   if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = ''; }
   const v = $('#playback'), dl = $('#dl'), verdict = $('#verdict');
@@ -1544,6 +1798,8 @@ function showResult(blob, secs) {
   const sh = $('#share');
   sh.hidden = !(resultFile && navigator.canShare && navigator.canShare({ files: [resultFile] }));
   $('#result').hidden = false;
+  if (blob.size) dl.textContent = cfg.autoEdit !== false ? 'שמור גלם (מלא)' : audioOnlyRun ? 'שמור הקלטה' : 'שמור סרטון';
+  startEdit(blob);
   try { history.pushState({ r: 1 }, ''); } catch (e) {}
 }
 
@@ -1803,6 +2059,7 @@ $('#dl').addEventListener('click', async e => {
 function hideResult() {
   if ($('#result').hidden) return;
   $('#result').hidden = true;
+  edClear(); edBlob = null;
   const v = $('#playback');
   v.removeAttribute('src');
   v.load();
@@ -1831,6 +2088,9 @@ $('#moreBtn').addEventListener('click', () => {
   applyLayout(); aim(false);
 });
 $('#restart').addEventListener('click', restartTake);
+$('#retakeBtn').addEventListener('click', retake);
+$('#edRetry').addEventListener('click', () => { if (edBlob) startEdit(edBlob); });
+if (location.hostname === 'localhost') window.__tp = { st: () => ({ pos, view: view(), recording, mode, cuts: edCuts, speech: edSpeech, word: edWord, t: recNow() }), edRepeat, setPos, setMode: m => { mode = m; } };
 $('#lineBack').addEventListener('click', () => lineStep(-1));
 $('#lineFwd').addEventListener('click', () => lineStep(1));
 

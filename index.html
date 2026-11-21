@@ -191,7 +191,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v36</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v37</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -332,7 +332,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v36';
+const APP_VER = 'v37';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -892,7 +892,7 @@ function loop(t) {
   if (analyser) {
     if (lvl < noiseFloor) noiseFloor = lvl; else noiseFloor += (lvl - noiseFloor) * 0.0007;
     const thr = cfg.sens === 'high' ? 0.022 : cfg.sens === 'low' ? 0.08 : 0.04;
-    if (lvl > noiseFloor + Math.max(thr, noiseFloor) && isVoiced()) voiceUntil = t + (cfg.hold || 350);
+    if (lvl > noiseFloor + Math.max(thr, noiseFloor) && isVoiced()) { voiceUntil = t + (cfg.hold || 350); voicedAt(t / 1000); }
     // for the edited version: anything a bit louder than the room counts as talking (keeps more, never less)
     if (recording) edVoice(lvl > noiseFloor + Math.max(thr, noiseFloor) * 0.8);
     if (running) talkLog(t / 1000, lvl > noiseFloor + Math.max(thr, noiseFloor) * 0.8);
@@ -1558,6 +1558,10 @@ function finishRecording() {
    so it is found even while you talk. One snap: back to the top line on screen. Two quick snaps:
    back to the start of the sentence (in sentence view: the sentence before). */
 const snapLog = [];
+let snapCands = [];
+const voicedTs = [];   // times of recent frames that had voice in them
+function voicedAt(t) { voicedTs.push(t); while (voicedTs.length && voicedTs[0] < t - 1.5) voicedTs.shift(); }
+const voicedIn = (a, b) => voicedTs.some(x => x > a && x < b);
 let snapAn = null, snapOf = null, sbuf = null, snapLast = -9, snapPend = null, snapTimer = 0, inputAt = -9;
 const SNAP_MIN = 0.08;
 // returns {t (seconds ago from the end of the buffer), P} or null
@@ -1582,27 +1586,45 @@ function snapListen(an) {   // a long window next to the analyser the app alread
   }
   return snapAn;
 }
+// A click inside your talking (a hard consonant, a pop on the mic) can look like a snap.
+// A real snap comes in a pause: no voice just before it, and none in the moment after it.
 function snapCheck() {
   const an = snapListen(analyser);
   if (!an) return;
+  const now = performance.now() / 1000;
+  for (let i = snapCands.length - 1; i >= 0; i--) {
+    const c = snapCands[i];
+    if (voicedIn(c.t + 0.12, c.t + 0.32)) { snapCands.splice(i, 1); c.log[2] = 'talk-after'; }   // the snap's own ring dies in ~0.1 s
+    else if (now - c.t >= 0.34) { snapCands.splice(i, 1); c.log[2] = 'ok'; snapHit(c.t); }
+  }
   an.getFloatTimeDomainData(sbuf);
   const s = findSnap(sbuf, an.context.sampleRate, cfg.snapLvl ? Math.max(SNAP_MIN * 0.5, cfg.snapLvl * 0.4) : SNAP_MIN);
   if (!s) return;
-  const t = performance.now() / 1000 - s.ago;
+  const t = now - s.ago;
   if (t - snapLast < 0.15) return;   // the same snap, seen again in the next window
   snapLast = t;
-  snapLog.push([+(t - recT0 / 1000).toFixed(2), +s.P.toFixed(3)]);
-  if (t - inputAt < 0.5) return;     // the click of a mouse or a key
-  if (recording && recNow() < 0.8) return;
+  const log = [+(t - recT0 / 1000).toFixed(2), +s.P.toFixed(3), ''];
+  snapLog.push(log); if (snapLog.length > 60) snapLog.shift();
+  if (t - inputAt < 0.5) { log[2] = 'click'; return; }       // the click of a mouse or a key
+  if (recording && recNow() < 0.8) { log[2] = 'start'; return; }
+  if (voicedIn(t - 0.15, t - 0.005)) { log[2] = 'talk-before'; return; }
+  snapCands.push({ t, log });
+}
+function snapHit(t) {
   showNote('👌'); clearTimeout(snapCheck.n); snapCheck.n = setTimeout(() => showNote(''), 700);
+  clearTimeout(snapTimer);
   if (snapPend && t - snapPend.t > 0.12 && t - snapPend.t < 0.9) {
-    clearTimeout(snapTimer); const first = snapPend.t; snapPend = null;
+    const first = snapPend.t; snapPend = null;
     retake(2, t + 0.3, first);
-  } else {
-    clearTimeout(snapTimer);
-    snapPend = { t };
-    snapTimer = setTimeout(() => { if (snapPend) { const st = snapPend.t; snapPend = null; retake(1, st + 0.3, st); } }, 750);
+    return;
   }
+  snapPend = { t };
+  const fire = () => {
+    if (!snapPend) return;
+    if (snapCands.length) { snapTimer = setTimeout(fire, 150); return; }   // a second snap is still being checked
+    const st = snapPend.t; snapPend = null; retake(1, st + 0.3, st);
+  };
+  snapTimer = setTimeout(fire, 650);
 }
 addEventListener('pointerdown', () => { inputAt = performance.now() / 1000; }, true);
 addEventListener('keydown', () => { inputAt = performance.now() / 1000; }, true);
@@ -2010,7 +2032,7 @@ function showResult(blob, secs) {
   verdict.textContent = msg;
   verdict.classList.toggle('bad', bad);
   $('#report').value = [APP_VER, 'audioOnly=' + audioOnlyRun, 'fellBack=' + (fellBack || 'no'), 'seconds=' + secs, 'usedVoice=' + usedVoice, 'burn=' + burnUsed, 'speechEvents=' + speechEvents, 'peak=' + peak.toFixed(2),
-    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'aacSupport=' + ['video/mp4;codecs=avc1,mp4a.40.2', 'audio/mp4;codecs=mp4a.40.2'].map(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return '?'; } }).join('/'), 'errors=' + (recErrors.join('|') || 'none'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
+    'trackMuted=' + trackMuted, 'bytes=' + blob.size, 'mime=' + (mime || 'default'), 'aacSupport=' + ['video/mp4;codecs=avc1,mp4a.40.2', 'audio/mp4;codecs=mp4a.40.2'].map(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return '?'; } }).join('/'), 'errors=' + (recErrors.join('|') || 'none'), 'snaps=' + (cfg.snap ? snapLog.map(l => l.join(':')).join(',') || 'none' : 'off'), 'speechErrors=' + (srErrors.join('|') || 'none'), navigator.userAgent].join('\n');
   const sh = $('#share');
   sh.hidden = !(resultFile && navigator.canShare && navigator.canShare({ files: [resultFile] }));
   $('#result').hidden = false;

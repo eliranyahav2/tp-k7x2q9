@@ -191,7 +191,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v35</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v36</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
@@ -240,12 +240,15 @@ details summary{color:var(--muted);cursor:pointer}
       <label class="check"><input type="checkbox" id="burn"> כתוביות בתוך הסרטון</label>
       <label class="check"><input type="checkbox" id="autoEdit"> הכן גם גרסה ערוכה (הגלם המלא נשמר תמיד)</label>
       <label class="check"><input type="checkbox" id="cutSilence"> בגרסה הערוכה: לחתוך שתיקות ארוכות</label>
+      <label class="check"><input type="checkbox" id="snapOn"> נקישת אצבעות = ↺ שוב (אחת: לשורה העליונה, שתיים: משפט אחורה)</label>
     </div>
     <p class="note" id="support" hidden></p>
     <p class="hint" id="fsHint" hidden>באייפון אין מסך מלא מתוך Safari. לחץ שיתוף, "הוסף למסך הבית", ופתח את הטלפרומפטר משם.</p>
-    <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה". מקבלים את הגלם המלא, ובנוסף גרסה ערוכה בלי שתיקות ובלי קטעים שחזרת עליהם (לחצת "↺ שוב", או במחשב: התחלת משפט מחדש). "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
+    <p class="hint" id="recHint">הסרטון נשאר אצלך. בסוף לוחצים "סיום ושמירה". מקבלים את הגלם המלא, ובנוסף גרסה ערוכה בלי שתיקות ובלי קטעים שחזרת עליהם (לחצת "↺ שוב" או נקשת באצבעות, או במחשב: התחלת משפט מחדש). כדאי להריץ פעם אחת "בדוק נקישת אצבעות" מהמקום שממנו אתה מצלם. "כתוביות בתוך הסרטון" צורב את הטקסט על התמונה.</p>
   </section>
   <div class="panel">
+  <button class="btn2" id="snapTest" type="button" style="min-height:46px;border-radius:12px;font-weight:700">בדוק נקישת אצבעות (8 שניות)</button>
+  <p class="hint" id="snapOut" hidden></p>
   <button class="btn2" id="diag" type="button" style="min-height:46px;border-radius:12px;font-weight:700">בדיקת מכשיר (20 שניות)</button>
   <button class="btn2" id="copyRep" type="button" style="min-height:46px;border-radius:12px;font-weight:700">העתק דוח תקלה (להדבקה בצ'אט)</button>
   <pre id="diagOut" hidden style="direction:rtl;text-align:right;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;font:.85rem/1.5 var(--font-ui);margin:0"></pre>
@@ -329,7 +332,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v35';
+const APP_VER = 'v36';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -524,6 +527,9 @@ autoEditIn.checked = cfg.autoEdit !== false; cutSilIn.checked = cfg.cutSilence !
 autoEditIn.addEventListener('change', () => { cfg.autoEdit = autoEditIn.checked; save(); });
 cutSilIn.addEventListener('change', () => { cfg.cutSilence = cutSilIn.checked; save(); });
 retakeSel.addEventListener('change', () => { cfg.retakeTo = retakeSel.value; save(); });
+const snapIn = $('#snapOn');
+snapIn.checked = !!cfg.snap;
+snapIn.addEventListener('change', () => { cfg.snap = snapIn.checked; save(); });
 langSel.addEventListener('change', () => { cfg.lang = langSel.value; save(); });
 const leadSel = $('#lead');
 leadSel.value = String(cfg.lead);
@@ -847,12 +853,14 @@ function setPos(p) {
   if (recording && pos > was) edMark(was, pos);
   paint();
   aim(false);
+  noteChunk();
   if (view() >= words.length && mode === 'voice') setStat('סוף הטקסט', false);
 }
 function jumpTo(p) {
-  lastSync = Date.now(); clockFrac = 0;
+  lastSync = Date.now(); clockFrac = 0; chunkPrev = -1; chunkJump = true;
   if (recording) edJumpT = recNow();
   setPos(p - (mode === 'voice' ? cfg.lead : 0));
+  chunkJump = false;
   if (mode === 'voice' && !paused) { stopRec(); startRec(); }
 }
 function nextSentence() {
@@ -887,6 +895,8 @@ function loop(t) {
     if (lvl > noiseFloor + Math.max(thr, noiseFloor) && isVoiced()) voiceUntil = t + (cfg.hold || 350);
     // for the edited version: anything a bit louder than the room counts as talking (keeps more, never less)
     if (recording) edVoice(lvl > noiseFloor + Math.max(thr, noiseFloor) * 0.8);
+    if (running) talkLog(t / 1000, lvl > noiseFloor + Math.max(thr, noiseFloor) * 0.8);
+    if (cfg.snap && running) snapCheck();
     if (mode === 'voice' && running && !paused && t < voiceUntil) talkMs += dt * 1000;
   }
   if (mode === 'pace' && analyser) {
@@ -1542,6 +1552,91 @@ function finishRecording() {
     } else done();
   });
 }
+/* ============ finger snap = "↺ שוב" (optional, in settings) ============
+   A snap is a click: it jumps up in under a millisecond, is almost all high pitch, and dies away
+   within a few ms. Talking never looks like that. Looked for in the high-passed mic signal,
+   so it is found even while you talk. One snap: back to the top line on screen. Two quick snaps:
+   back to the start of the sentence (in sentence view: the sentence before). */
+const snapLog = [];
+let snapAn = null, snapOf = null, sbuf = null, snapLast = -9, snapPend = null, snapTimer = 0, inputAt = -9;
+const SNAP_MIN = 0.08;
+// returns {t (seconds ago from the end of the buffer), P} or null
+function findSnap(buf, sr, minP) {
+  const n = buf.length, ms = x => Math.round(x * sr / 1000);
+  let p = 1, P = 0;
+  for (let i = 1; i < n; i++) { const d = Math.abs(buf[i] - buf[i - 1]); if (d > P) { P = d; p = i; } }
+  if (P < minP || p < ms(14) || p > n - ms(10)) return null;
+  let pre = 0, post = 0, bg = 0;
+  for (let i = p - ms(10); i < p - ms(2); i++) pre = Math.max(pre, Math.abs(buf[i] - buf[i - 1]));
+  for (let i = p + ms(5); i < p + ms(10); i++) post = Math.max(post, Math.abs(buf[i] - buf[i - 1]));
+  const e = p - ms(10);
+  for (let i = 1; i < e; i++) { const d = buf[i] - buf[i - 1]; bg += d * d; }
+  bg = Math.sqrt(bg / Math.max(1, e - 1));
+  if (pre < 0.25 * P && post < 0.5 * P && P > 10 * bg) return { ago: (n - p) / sr, P };
+  return null;
+}
+function snapListen(an) {   // a long window next to the analyser the app already has
+  if (snapOf !== an) {
+    try { snapAn = an.context.createAnalyser(); snapAn.fftSize = 4096; an.connect(snapAn); snapOf = an; sbuf = new Float32Array(4096); }
+    catch (e) { snapAn = null; snapOf = an; }
+  }
+  return snapAn;
+}
+function snapCheck() {
+  const an = snapListen(analyser);
+  if (!an) return;
+  an.getFloatTimeDomainData(sbuf);
+  const s = findSnap(sbuf, an.context.sampleRate, cfg.snapLvl ? Math.max(SNAP_MIN * 0.5, cfg.snapLvl * 0.4) : SNAP_MIN);
+  if (!s) return;
+  const t = performance.now() / 1000 - s.ago;
+  if (t - snapLast < 0.15) return;   // the same snap, seen again in the next window
+  snapLast = t;
+  snapLog.push([+(t - recT0 / 1000).toFixed(2), +s.P.toFixed(3)]);
+  if (t - inputAt < 0.5) return;     // the click of a mouse or a key
+  if (recording && recNow() < 0.8) return;
+  showNote('👌'); clearTimeout(snapCheck.n); snapCheck.n = setTimeout(() => showNote(''), 700);
+  if (snapPend && t - snapPend.t > 0.12 && t - snapPend.t < 0.9) {
+    clearTimeout(snapTimer); const first = snapPend.t; snapPend = null;
+    retake(2, t + 0.3, first);
+  } else {
+    clearTimeout(snapTimer);
+    snapPend = { t };
+    snapTimer = setTimeout(() => { if (snapPend) { const st = snapPend.t; snapPend = null; retake(1, st + 0.3, st); } }, 750);
+  }
+}
+addEventListener('pointerdown', () => { inputAt = performance.now() / 1000; }, true);
+addEventListener('keydown', () => { inputAt = performance.now() / 1000; }, true);
+// settings: snap a few times, see that it is heard, and fit the level to you
+async function snapTest() {
+  const out = $('#snapOut'), btn = $('#snapTest');
+  out.hidden = false; btn.disabled = true;
+  let st = null, ctx = null;
+  try {
+    st = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_C });
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state !== 'running') await ctx.resume();
+    const an = ctx.createAnalyser(); an.fftSize = 4096; ctx.createMediaStreamSource(st).connect(an);
+    const b = new Float32Array(4096), found = [];
+    let last = -9;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 8000) {
+      out.textContent = 'נקוש באצבעות 3 פעמים, במרחק שאתה מצלם ממנו… (' + Math.ceil((8000 - (performance.now() - t0)) / 1000) + ')  זוהו: ' + found.length;
+      an.getFloatTimeDomainData(b);
+      const s = findSnap(b, ctx.sampleRate, SNAP_MIN * 0.5);
+      if (s) { const t = performance.now() / 1000 - s.ago; if (t - last > 0.15) found.push(s.P); last = t; }
+      await sleep(16);
+    }
+    if (found.length) {
+      found.sort((x, y) => x - y);
+      cfg.snapLvl = found[Math.floor(found.length / 2)]; save();
+      out.textContent = 'זוהו ' + found.length + ' נקישות. מעולה, הרגישות כוונה אליך.' + (found.length > 4 ? ' (יותר ממה שנקשת? אולי יש רעשי הקשה בחדר.)' : '');
+    } else out.textContent = 'לא זוהתה נקישה. נסה חזק יותר או קרוב יותר לטלפון.';
+  } catch (e) { out.textContent = 'אין גישה למיקרופון (' + (e && e.name) + ').'; }
+  if (st) st.getTracks().forEach(t => t.stop());
+  if (ctx) try { ctx.close(); } catch (e) {}
+  btn.disabled = false;
+}
+
 /* ============ auto edit (no AI): a timeline of the take -> a second, cut version ============
    The raw recording is never touched. While recording we log when you talk (from the mic level),
    when each word was passed, and the parts to throw away ("↺ שוב", or a sentence you started again).
@@ -1575,10 +1670,13 @@ function edStartOf(i, hi) {
   const c = edOnsets(prev - 0.15, hi);
   return c.length ? c[0] : hi;
 }
-// "↺ שוב": the failed try, from where it started until now, goes
-function edRetake(target) {
-  const now = recNow(), t0 = edStartOf(target, now);
-  if (now - t0 > 0.05) edCuts.push([t0 - 0.05, now + 0.15, 'retake']);
+// "↺ שוב": the failed try, from where it started until you pressed (or snapped), goes.
+// endP / pressP are performance.now() seconds; without them: now.
+function edRetake(target, endP, pressP) {
+  const now = recNow(), T = x => x - recT0 / 1000;
+  const press = pressP != null ? T(pressP) : now, end = endP != null ? Math.max(T(endP), press) : now + 0.15;
+  const t0 = edStartOf(target, press);
+  if (press - t0 > 0.05) edCuts.push([t0 - 0.05, end, 'retake', press]);
   edForget(target);
 }
 // voice mode, on the computer: the same words heard twice in a row = you gave up on a try and
@@ -1599,7 +1697,7 @@ function edRepeat(np, heard) {
   const now = recNow(), t1 = edStartOf(R, now);
   const est2 = now - 0.9 - 0.42 * (L - first), c = edOnsets(Math.max(t1 + 0.5, est2 - 1.2), est2 + 0.6);
   const t2 = (c.length ? nearest(c, est2) : est2) - 0.05;
-  if (t2 - t1 > 0.5 && t2 - t1 < 45) edCuts.push([t1 - 0.05, t2, 'repeat']);
+  if (t2 - t1 > 0.5 && t2 - t1 < 45) edCuts.push([t1 - 0.05, t2, 'repeat', t2]);
   edForget(R); edMark(R, np);
 }
 function chunkStart(v) {
@@ -1610,40 +1708,151 @@ function chunkStart(v) {
   const i = lineOf.indexOf(pageStart >= 0 ? pageStart : lineOf[v]);
   return i >= 0 && i <= v ? i : s;
 }
-function retake() {
+// the top line on the screen (sentence view: the sentence shown)
+function topShown(v) {
+  if (isSent()) return segs[segOf[v]][0];
+  if (linesDirty) calcLines();
+  const i = lineOf.indexOf(cfg.lines > 0 && pageStart >= 0 ? pageStart : lineOf[v]);
+  return i >= 0 && i <= v ? i : v;
+}
+// The screen moved on to the next part, you stopped (you tripped at the end of the old part),
+// and only then pressed or snapped: you mean the part you were reading, not the new one.
+const talkSegs = [];
+let chunkNow = -1, chunkPrev = -1, chunkAt = 0, chunkJump = false;
+function talkLog(t, on) {
+  if (!on) return;
+  const s = talkSegs[talkSegs.length - 1];
+  if (s && t - s[1] < 0.25) s[1] = t; else { talkSegs.push([t, t]); if (talkSegs.length > 40) talkSegs.shift(); }
+}
+function noteChunk() {
+  if (!words.length) return;
+  const c = topShown(clamp(view(), 0, words.length - 1));
+  if (c === chunkNow) return;
+  chunkPrev = !chunkJump && c > chunkNow ? chunkNow : -1;
+  chunkNow = c; chunkAt = performance.now() / 1000;
+}
+function justFlipped(pT) {
+  return chunkPrev >= 0 && chunkPrev < chunkNow && pT - chunkAt < 4 && !talkSegs.some(s => s[1] > chunkAt + 0.3 && s[0] < pT - 0.1);
+}
+// kind 0: the "↺ שוב" button. 1: one snap. 2: two snaps (one step further back than one snap)
+function retake(kind, endP, pressP) {
   if (!running || !words.length) return;
-  const v = clamp(view(), 0, words.length - 1);
-  let target = chunkStart(v);
-  const again = Date.now() - lastRetake < 3000 && v <= lastRetakeTo && lastRetakeTo > 0;
-  if (again) target = chunkStart(lastRetakeTo - 1);   // pressed twice: one more back
-  if (recording) edRetake(target);
+  const flip = justFlipped(pressP != null ? pressP : performance.now() / 1000);
+  const v = flip ? chunkNow - 1 : clamp(view(), 0, words.length - 1);
+  let target;
+  if (kind === 1 || kind === 2) {
+    target = flip ? chunkPrev : topShown(v);
+    if (kind === 2) { let b = 0; for (const i of starts) { if (i < target) b = i; else break; } target = b; }
+  } else {
+    target = flip && cfg.retakeTo !== 'sent' ? chunkPrev : chunkStart(v);
+    const again = Date.now() - lastRetake < 3000 && v <= lastRetakeTo && lastRetakeTo > 0;
+    if (again) target = chunkStart(lastRetakeTo - 1);   // pressed twice: one more back
+  }
+  if (recording) edRetake(target, endP, pressP);
   lastRetake = Date.now(); lastRetakeTo = target;
   pageStart = -1;
   jumpTo(target);
-  if (recording) { showNote('↺ הקטע סומן למחיקה בגרסה הערוכה. לחיצה נוספת מיד: עוד משפט אחורה.'); clearTimeout(retake.t); retake.t = setTimeout(() => showNote(''), 2500); }
+  if (recording) { showNote(kind ? '↺ חוזרים. הקטע יימחק בגרסה הערוכה.' : '↺ הקטע סומן למחיקה בגרסה הערוכה. לחיצה נוספת מיד: עוד משפט אחורה.'); clearTimeout(retake.t); retake.t = setTimeout(() => showNote(''), 2500); }
 }
 
+// After the take: read the sound back from the file itself and find the talking, 10 ms at a time.
+// Much finer than the live meter, and soft word endings count as talking (a low threshold).
+async function edAnalyze(blob) {
+  if (blob.size > 250e6) return null;   // too big to read on a phone
+  try {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const ac = new OAC(1, 16000, 16000);
+    const data = await blob.arrayBuffer();
+    const ab = await new Promise((res, rej) => { try { const pr = ac.decodeAudioData(data, res, rej); if (pr && pr.then) pr.then(res, rej); } catch (e) { rej(e); } });
+    const sr = ab.sampleRate, hop = Math.round(sr / 100), nch = ab.numberOfChannels, chs = [];
+    for (let c = 0; c < nch; c++) chs.push(ab.getChannelData(c));
+    const nf = Math.floor(ab.length / hop), rms = new Float32Array(nf);
+    for (let f = 0; f < nf; f++) {
+      let q = 0;
+      for (let i = f * hop; i < (f + 1) * hop; i++) { let x = 0; for (let c = 0; c < nch; c++) x += chs[c][i]; x /= nch; q += x * x; }
+      rms[f] = Math.sqrt(q / hop);
+    }
+    return { rms, dur: ab.duration };
+  } catch (e) { recErrors.push('analyze:' + ((e && e.name) || e)); return null; }
+}
+function edSegments(off) {
+  const r = off.rms, n = r.length;
+  if (n < 50) return null;
+  const so = Float32Array.from(r).sort(), floor = so[Math.floor(n * 0.1)], loud = so[Math.floor(n * 0.95)];
+  if (!(loud > floor * 4 && loud > 0.003)) return null;
+  const hi = floor + (loud - floor) * 0.1, lo = Math.max(floor * 1.8, floor + (loud - floor) * 0.03), S = [];
+  for (let i = 0; i < n;) {
+    if (r[i] < hi) { i++; continue; }
+    let a = i, b = i;
+    while (a > 0 && r[a - 1] >= lo) a--;
+    while (b + 1 < n && r[b + 1] >= lo) b++;
+    const l = S[S.length - 1];
+    if (l && a / 100 - l[1] < 0.25) l[1] = Math.max(l[1], (b + 1) / 100); else S.push([a / 100, (b + 1) / 100]);
+    i = b + 1;
+  }
+  return S;
+}
+// the live clock and the file's clock differ by a few hundredths: line up the talking
+function edOffset(S) {
+  const d = [];
+  edSpeech.forEach(s => {
+    let best = null;
+    for (const o of S) { const x = o[0] - s[0]; if (Math.abs(x) < 0.5 && (best === null || Math.abs(x) < Math.abs(best))) best = x; }
+    if (best !== null) d.push(best);
+  });
+  if (d.length < 2) return 0;
+  d.sort((x, y) => x - y);
+  return clamp(d[d.length >> 1], -0.3, 0.5);
+}
+// a cut must never start or end inside a word: move its edges into the quiet
+function edValley(off, a, b) {
+  let bi = -1, bv = Infinity;
+  for (let f = Math.max(0, Math.floor(a * 100)); f < Math.min(off.rms.length, Math.ceil(b * 100)); f++) if (off.rms[f] < bv) { bv = off.rms[f]; bi = f; }
+  return bi < 0 ? (a + b) / 2 : bi / 100 + 0.005;
+}
+function edFixStart(S, off, t) {
+  const k = S.findIndex(s => t > s[0] && t < s[1]);
+  if (k < 0) return t;
+  const s = S[k], prevEnd = k ? S[k - 1][1] : 0;
+  if (t - s[0] < 0.5) return Math.max(s[0] - 0.05, prevEnd + 0.02, 0);   // just before the word the bad try began with
+  if (s[1] - t < 0.3) return s[1] + 0.02;                                // just after the last good word
+  return edValley(off, t - 0.3, t + 0.3);                               // no pause there: the quietest moment nearby
+}
+function edFixEnd(S, off, t, press) {
+  const k = S.findIndex(s => t > s[0] && t < s[1]);
+  if (k < 0) return t;
+  const s = S[k];
+  if (s[0] < press - 0.05) return s[1] - t < 1 ? s[1] + 0.02 : edValley(off, t - 0.2, t + 0.3);   // still the bad try
+  return Math.max(s[0] - 0.05, press);                                                             // the new try: keep it whole
+}
 // what to keep, in seconds of the raw recording
-function edPlan() {
-  const dur = edEnd;
-  const sp = edSpeech.filter(s => s[0] < dur);
+function edPlan(off) {
+  const S = off ? edSegments(off) : null, dur = S ? off.dur : edEnd;
+  const sp = S || edSpeech.filter(s => s[0] < dur);
   const talk = sp.reduce((a, s) => a + s[1] - s[0], 0);
-  // if the mic level looked odd (almost no talking found), don't trust it: cut no silence
-  const silenceOk = cfg.cutSilence !== false && sp.length > 0 && talk > dur * 0.2;
+  // if the level looked odd (almost no talking, or talking all the time), don't trust it: cut no silence
+  const silenceOk = cfg.cutSilence !== false && sp.length > 0 && talk > dur * (S ? 0.1 : 0.2) && (!S || talk < dur * 0.98);
+  const preP = S ? 0.2 : 0.2, postP = S ? 0.3 : 0.3;
   let keep = [];
   if (silenceOk) {
     sp.forEach(s => {
-      const a = Math.max(0, s[0] - 0.2), b = Math.min(dur, s[1] + 0.3), l = keep[keep.length - 1];
-      if (l && a - l[1] < 0.15) l[1] = Math.max(l[1], b); else keep.push([a, b]);
+      const a = Math.max(0, s[0] - preP), b = Math.min(dur, s[1] + postP), l = keep[keep.length - 1];
+      if (l && a - l[1] < 0.2) l[1] = Math.max(l[1], b); else keep.push([a, b]);
     });
   } else keep = [[0, dur]];
   const silCut = dur - keep.reduce((a, k) => a + k[1] - k[0], 0);
-  edCuts.map(c => [Math.max(0, c[0]), Math.min(dur, c[1])]).filter(c => c[1] > c[0]).forEach(c => {
+  const sh = S ? edOffset(S) : 0;
+  const cuts = edCuts.map(c => {
+    let a = c[0] + sh, b = c[1] + sh;
+    if (S) { a = edFixStart(S, off, a); b = edFixEnd(S, off, b, c[3] + sh); }
+    return [Math.max(0, a), Math.min(dur, b)];
+  }).filter(c => c[1] - c[0] > 0.05);
+  cuts.forEach(c => {
     keep = keep.flatMap(k => (c[1] <= k[0] || c[0] >= k[1] ? [k] : [[k[0], c[0]], [c[1], k[1]]].filter(q => q[1] - q[0] > 0.01)));
   });
   keep = keep.filter(k => k[1] - k[0] >= 0.2);
   const kept = keep.reduce((a, k) => a + k[1] - k[0], 0);
-  return { keep, dur, kept, removed: dur - kept, silCut, silenceOk,
+  return { keep, dur, kept, removed: dur - kept, silCut, silenceOk, exact: !!S, shift: sh, cuts,
     retakes: edCuts.filter(c => c[2] === 'retake').length, repeats: edCuts.filter(c => c[2] === 'repeat').length };
 }
 // replay the raw file and record only the kept parts (the parts in between are fast-forwarded)
@@ -1654,6 +1863,8 @@ function buildEdited(blob, keep, onProg) {
     $('#edBox').insertBefore(v, $('#edPlay'));
     let ctx = null, rec = null, out = [], timer = 0, done = false, ki = 0, lastCT = -1, lastMove = Date.now();
     const total = keep.reduce((a, k) => a + k[1] - k[0], 0);
+    // the sound reaches the recorder a few hundredths late: hold each part open a moment longer
+    keep = keep.map((k, i) => [k[0], i + 1 < keep.length ? Math.min(k[1] + 0.06, (k[1] + keep[i + 1][0]) / 2) : k[1] + 0.06]);
     const fin = err => {
       if (done) return; done = true;
       clearInterval(timer); edAbort = null;
@@ -1730,13 +1941,18 @@ function edClear() {
   $('#dlEdit').hidden = true; $('#edBox').hidden = true; $('#edRetry').hidden = true;
 }
 let edBlob = null;
-function startEdit(blob) {
+let edRun = 0;
+async function startEdit(blob) {
   edClear();
   edBlob = blob;
   if (cfg.autoEdit === false || !blob.size || !edEnd) return;
-  const p = edPlan(), box = $('#edBox'), st = $('#edStat'), bar = $('#edBar'), prog = $('#edProg');
+  const run = ++edRun, box = $('#edBox'), st = $('#edStat'), bar = $('#edBar'), prog = $('#edProg');
   box.hidden = false; bar.hidden = true;
-  $('#report').value += '\nedit: dur=' + p.dur.toFixed(1) + ' kept=' + p.kept.toFixed(1) + ' speech=' + edSpeech.length + ' cuts=' + edCuts.map(c => c[2] + ':' + c[0].toFixed(1) + '-' + c[1].toFixed(1)).join(',');
+  st.textContent = 'מנתח את הקול…';
+  const off = await edAnalyze(blob);
+  if (run !== edRun || $('#result').hidden) return;   // closed or restarted meanwhile
+  const p = edPlan(off);
+  $('#report').value += '\nedit: exact=' + p.exact + ' shift=' + p.shift.toFixed(2) + ' dur=' + p.dur.toFixed(1) + ' kept=' + p.kept.toFixed(1) + ' speech=' + edSpeech.length + ' cuts=' + edCuts.map((c, i) => c[2] + ':' + c[0].toFixed(1) + '-' + c[1].toFixed(1) + (p.cuts[i] ? '>' + p.cuts[i][0].toFixed(2) + '-' + p.cuts[i][1].toFixed(2) : '')).join(',');
   if (p.removed < 0.5 || !p.keep.length) { st.textContent = p.silenceOk || cfg.cutSilence === false ? 'לא נמצא מה לחתוך. הגלם הוא הגרסה הסופית.' : 'לא זוהה דיבור ברור, אז לא נחתך כלום. הגלם הוא הגרסה הסופית.'; return; }
   st.textContent = 'מכין גרסה ערוכה… ' + edMsg(p) + ' זה לוקח בערך ' + Math.max(5, Math.round(p.kept + 3)) + ' שניות. אפשר כבר לשמור את הגלם.';
   bar.hidden = false; prog.style.width = '0';
@@ -2059,7 +2275,7 @@ $('#dl').addEventListener('click', async e => {
 function hideResult() {
   if ($('#result').hidden) return;
   $('#result').hidden = true;
-  edClear(); edBlob = null;
+  edClear(); edBlob = null; edRun++;
   const v = $('#playback');
   v.removeAttribute('src');
   v.load();
@@ -2088,9 +2304,10 @@ $('#moreBtn').addEventListener('click', () => {
   applyLayout(); aim(false);
 });
 $('#restart').addEventListener('click', restartTake);
-$('#retakeBtn').addEventListener('click', retake);
+$('#retakeBtn').addEventListener('click', () => retake(0));
+$('#snapTest').addEventListener('click', snapTest);
 $('#edRetry').addEventListener('click', () => { if (edBlob) startEdit(edBlob); });
-if (location.hostname === 'localhost') window.__tp = { st: () => ({ pos, view: view(), recording, mode, cuts: edCuts, speech: edSpeech, word: edWord, t: recNow() }), edRepeat, setPos, setMode: m => { mode = m; } };
+if (location.hostname === 'localhost') window.__tp = { st: () => ({ pos, view: view(), recording, mode, cuts: edCuts, speech: edSpeech, word: edWord, t: recNow() }), edRepeat, setPos, setMode: m => { mode = m; }, findSnap, snapLog, edPlan, edAnalyze, edSegments, cfg: () => cfg };
 $('#lineBack').addEventListener('click', () => lineStep(-1));
 $('#lineFwd').addEventListener('click', () => lineStep(1));
 

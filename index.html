@@ -191,9 +191,10 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v37</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v38</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
+  <p class="hint" id="permTip" hidden style="color:var(--warn)"></p>
   <details class="settings" id="settings"><summary>⚙ הגדרות</summary>
   <section class="panel">
     <div class="seg" role="radiogroup" aria-label="איך הטקסט מתקדם">
@@ -332,7 +333,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v37';
+const APP_VER = 'v38';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -989,7 +990,7 @@ async function ensurePaceMeter() {
     await reviveMic(paceStream, analyser, paceAcx);
   } catch (e) {
     stopPaceMeter();
-    if (running && mode === 'pace') { showNote('אין גישה למיקרופון (' + camText(e && e.name) + '). עברתי לגלילה אוטומטית.'); setMode('auto'); modeRadios(); }
+    if (running && mode === 'pace') { showNote('אין גישה למיקרופון (' + camText(e && e.name) + '). עברתי לגלילה אוטומטית.'); setMode('auto', true); }
   }
 }
 function stopPaceMeter() {
@@ -1012,10 +1013,9 @@ function checkSr() {
   else if (speechEvents === 0 && !srAudioSeen && now - srStartAt > 12000) why = 'שירות הדיבור לא נפתח';
   if (!why) return;
   fellBack = why;
-  showNote('זיהוי הדיבור לא עובד כאן (' + why + '). עברתי ל"קצב לפי הקול": הטקסט זז כשאתה מדבר ונעצר כשאתה שותק. מהירות: כפתורי לאט/מהר.');
+  showNote('זיהוי הדיבור לא עובד כרגע (' + why + '). עברתי ל"קצב לפי הקול" רק עכשיו (בפעם הבאה ינסה שוב לפי הקול): הטקסט זז כשאתה מדבר ונעצר כשאתה שותק.');
   fatal = false;
-  setMode('pace');
-  modeRadios();
+  setMode('pace', true);
 }
 function modeRadios() { document.querySelectorAll('input[name=mode]').forEach(r => { r.checked = r.value === cfg.mode; }); applyModeUI(); }
 let rec = null, fatal = false;
@@ -1175,14 +1175,13 @@ function cycleLines() {
   save(); renderLinesBtn();
   applyLayout(); aim(true);
 }
-function setMode(m) {
+function setMode(m, justNow) {   // justNow: for this take only, the saved choice stays
   if (m === 'voice' && !SR) { setStat('אין תמיכה בזיהוי דיבור בדפדפן הזה.', false); return; }
   stopRec();
   if (m === 'pace') { wasTalking = false; voiceUntil = 0; resetSyl(); ensurePaceMeter(); }
   const was = mode;
   mode = m;
-  cfg.mode = m;
-  save();
+  if (!justNow) { cfg.mode = m; save(); }
   renderModeBtn();
   if (m === 'voice') {
     resetSrWatch(); showNote('');
@@ -2051,12 +2050,25 @@ async function ensurePerm(video) {
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return false;
   const need = [await permState('microphone')];
   if (video) need.push(await permState('camera'));
-  if (need.every(st => st === 'granted')) return true;
+  if (need.every(st => st === 'granted')) { if (!cfg.permOk) { cfg.permOk = 1; save(); } return true; }
+  if (cfg.permOk) permTip(true);   // it was allowed before and asks again: "this time only" was chosen
   try {
     const s = await navigator.mediaDevices.getUserMedia(video ? { audio: true, video: true } : { audio: true });
     s.getTracks().forEach(t => t.stop());
     return true;
   } catch (e) { return false; }
+}
+// Chrome remembers the answer only for a real web address (https), and only with "while visiting the site"
+function permTip(again) {
+  const el = $('#permTip');
+  if (!el) return;
+  if (location.protocol === 'file:') {
+    el.innerHTML = 'האפליקציה פתוחה כקובץ מהמחשב, ולכן הדפדפן ישאל על המיקרופון בכל פעם. פתח אותה מהכתובת: <a href="https://eliranyahav2.github.io/tp-k7x2q9/">eliranyahav2.github.io/tp-k7x2q9</a> ושם בחר "בזמן הביקור באתר".';
+    el.hidden = false;
+  } else if (again) {
+    el.textContent = 'הדפדפן שוב ביקש אישור, כנראה כי נבחר "הפעם בלבד". בפעם הבאה בחר "בזמן הביקור באתר". בטלפון: הגדרות ← אפליקציות ← Chrome ← הרשאות ← מיקרופון ומצלמה ← "רק בזמן השימוש באפליקציה" (לא "שאל בכל פעם").';
+    el.hidden = false;
+  }
 }
 let opening = false;
 async function openPrompter() {
@@ -2066,7 +2078,7 @@ async function openPrompter() {
   const needMic = (cfg.record && canRecord) || wantMode !== 'auto';
   if (needMic) {
     opening = true;
-    errEl.textContent = 'מבקש אישור למיקרופון' + (cfg.record && !cfg.audioOnly ? ' ולמצלמה' : '') + '…';
+    errEl.textContent = 'מבקש אישור למיקרופון' + (cfg.record && !cfg.audioOnly ? ' ולמצלמה' : '') + '… כדי שלא ישאל שוב: בחר "בזמן הביקור באתר" (While visiting the site), לא "הפעם בלבד".';
     errEl.hidden = false;
     await ensurePerm(!!(cfg.record && canRecord && !cfg.audioOnly));
     errEl.hidden = true;
@@ -2328,6 +2340,7 @@ $('#moreBtn').addEventListener('click', () => {
 $('#restart').addEventListener('click', restartTake);
 $('#retakeBtn').addEventListener('click', () => retake(0));
 $('#snapTest').addEventListener('click', snapTest);
+permTip(false);
 $('#edRetry').addEventListener('click', () => { if (edBlob) startEdit(edBlob); });
 if (location.hostname === 'localhost') window.__tp = { st: () => ({ pos, view: view(), recording, mode, cuts: edCuts, speech: edSpeech, word: edWord, t: recNow() }), edRepeat, setPos, setMode: m => { mode = m; }, findSnap, snapLog, edPlan, edAnalyze, edSegments, cfg: () => cfg };
 $('#lineBack').addEventListener('click', () => lineStep(-1));

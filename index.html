@@ -191,7 +191,7 @@ details summary{color:var(--muted);cursor:pointer}
 <body>
 
 <main class="setup" id="setup">
-  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v38</small></h1><span id="count" class="muted"></span></header>
+  <header class="top"><h1>טלפרומפטר קולי <small style="font-size:.5em;opacity:.6">v39</small></h1><span id="count" class="muted"></span></header>
   <textarea id="text" spellcheck="false" placeholder="הדבק כאן את הטקסט שאתה רוצה להקריא" aria-label="הטקסט שלך"></textarea>
   <p class="hint" id="sumLine"></p>
   <p class="hint" id="permTip" hidden style="color:var(--warn)"></p>
@@ -333,7 +333,7 @@ details summary{color:var(--muted);cursor:pointer}
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const APP_VER = 'v38';
+const APP_VER = 'v39';
 const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 /* ============ matching logic (pure, no DOM) ============ */
@@ -402,6 +402,70 @@ function findNext(words, pos, heard) {
     if (bestNp >= 0) return bestNp;
   }
   return -1;
+}
+// Numbers: "20" and "עשרים" are the same word to us.
+const NUMW = { 'אפס': 0, 'אחד': 1, 'אחת': 1, 'שתיימ': 2, 'שניימ': 2, 'שני': 2, 'שתי': 2, 'שלוש': 3, 'שלושה': 3, 'שלש': 3, 'שלשה': 3, 'ארבע': 4, 'ארבעה': 4,
+  'חמש': 5, 'חמישה': 5, 'חמשה': 5, 'שש': 6, 'שישה': 6, 'ששה': 6, 'שבע': 7, 'שבעה': 7, 'שמונה': 8, 'תשע': 9, 'תשעה': 9, 'עשר': 10, 'עשרה': 10,
+  'עשרימ': 20, 'שלושימ': 30, 'שלשימ': 30, 'ארבעימ': 40, 'חמישימ': 50, 'שישימ': 60, 'שבעימ': 70, 'שמונימ': 80, 'תשעימ': 90,
+  'מאה': 100, 'מאתיימ': 200, 'מאות': -1, 'אלפ': 1000, 'אלפיימ': 2000, 'אלפימ': -1 };
+function numOf(w) {
+  if (/^\d+$/.test(w)) return +w;
+  if (w in NUMW) return NUMW[w];
+  if (w.length > 2 && w[0] === 'ו' && w.slice(1) in NUMW) return NUMW[w.slice(1)];
+  return null;
+}
+// how well a heard word fits a script word: 0 no, 1 loosely (two different numbers), 2 yes
+function wfit(t, h) {
+  if (similar(t, h)) return 2;
+  const a = numOf(t), b = numOf(h);
+  if (a === null || b === null) return 0;
+  return a === b ? 2 : 0;
+}
+// How well do the last words heard line up with the script just before np?
+// Local alignment that must end at word np-1 (one stray word at the very end is forgiven).
+function ctxScore(words, np, h) {
+  const M = h.length, T = Math.min(np, M + 4), t0 = np - T;
+  let prev = new Array(T + 1).fill(0), best = -1, beforeLast = -1;
+  for (let i = 1; i <= M; i++) {
+    const cur = new Array(T + 1).fill(0);
+    for (let j = 1; j <= T; j++) {
+      const w = words[t0 + j - 1].n, f = wfit(w, h[i - 1]);
+      const m = f === 2 ? (isContent(w) || numOf(w) !== null ? 3 : 1.5) : f === 1 ? 0.5 : -1.2;
+      cur[j] = Math.max(0, prev[j - 1] + m, prev[j] - 1, cur[j - 1] - 1.5);   // a heard extra word costs 1, a skipped script word 1.5
+    }
+    if (i === M - 1) beforeLast = cur[T];
+    if (i === M) best = cur[T];
+    prev = cur;
+  }
+  return Math.max(best, beforeLast - 3);
+}
+// Where are you now? Returns { np, near }: np = the best place (maybe far away), near = the best
+// place close by. A far jump (far: true) is only taken once the next words agree (see onResult).
+function findNext2(words, pos, heard) {
+  const none = { np: -1, far: false, near: -1 };
+  if (!heard.length || pos >= words.length) return none;
+  const h = heard.slice(-10), L = h.length, last = h[L - 1], prevW = L > 1 ? h[L - 2] : null;
+  let best = null, near = null;
+  for (let np = Math.max(1, pos - 40); np <= Math.min(words.length, pos + 80); np++) {
+    const w = words[np - 1].n;
+    const d = np - pos, fitLast = wfit(w, last) === 2;
+    if (!fitLast && !(prevW && d >= -1 && d <= 1 && wfit(w, prevW) === 2)) continue;   // the last word heard may be a stray one only right here
+    const A = ctxScore(words, np, h);
+    let need;
+    if (d >= 0 && d <= 1) need = 1.5;
+    else if (d >= 2 && d <= 3) need = last.length < 3 ? 4.5 : 3;
+    else if (d >= 4 && d <= 8) need = 4.5;
+    else if (d > 8) need = 6 + 0.04 * d;
+    else need = d >= -2 ? 4.5 : 6;
+    if (A < need) continue;
+    const total = A - (d >= 0 ? 0.12 * d : 1 + 0.1 * -d);
+    const far = d > 8 || d < -3 ? A < 10 : false;
+    const c = { np, A, total, far };
+    if (!best || total > best.total) best = c;
+    if (!far && (!near || total > near.total)) near = c;
+  }
+  if (!best) return none;
+  return { np: best.np, far: best.far, near: near ? near.np : -1 };
 }
 // </pure>
 
@@ -858,7 +922,7 @@ function setPos(p) {
   if (view() >= words.length && mode === 'voice') setStat('סוף הטקסט', false);
 }
 function jumpTo(p) {
-  lastSync = Date.now(); clockFrac = 0; chunkPrev = -1; chunkJump = true;
+  lastSync = Date.now(); clockFrac = 0; chunkPrev = -1; chunkJump = true; fnPend = null;
   if (recording) edJumpT = recNow();
   setPos(p - (mode === 'voice' ? cfg.lead : 0));
   chunkJump = false;
@@ -1077,6 +1141,7 @@ function beginSR(r) {
   }
   try { r.start(); } catch (e) {}
 }
+let fnPend = null;
 function onResult(e) {
   speechEvents++;
   talkMs = 0; srSpeechAt = 0;
@@ -1087,7 +1152,14 @@ function onResult(e) {
   raw.forEach(r => { const n = norm(r); if (n) { heard.push(n); shown.push(r); } });
   if (!heard.length) return;
   heardEl.textContent = shown.slice(-6).join(' ');
-  const np = findNext(words, pos, heard);
+  // where are you? a jump far away is only taken once the next word you say agrees with it
+  const r = findNext2(words, pos, heard);
+  let np = -1;
+  if (r.np >= 0) {
+    if (!r.far) { np = r.np; fnPend = null; }
+    else if (fnPend && heard.length > fnPend.len && r.np > fnPend.np && r.np <= fnPend.np + 5) { np = r.np; fnPend = null; }
+    else { if (!fnPend || heard.length !== fnPend.len) fnPend = { np: r.np, len: heard.length }; np = r.near; }
+  }
   if (recording) edRepeat(np, heard);
   if (np >= 0) {
     lastSync = Date.now();
